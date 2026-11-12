@@ -3,13 +3,14 @@
 const { chromium } = require('playwright');
 (async () => {
   const base = process.argv[2] || 'http://localhost:5173';
-  const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-  const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const proxy = base.startsWith('https') && process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY } : undefined;
+  const browser = await chromium.launch({ proxy, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, ignoreHTTPSErrors: !!proxy });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`${base}/?q=low&noinstall`, { waitUntil: 'load' });
-  await page.waitForFunction(() => window.__padel, null, { timeout: 30000 });
+  await page.waitForFunction(() => window.__padel, null, { timeout: 90000 });
   await page.evaluate(() => window.__padel.startMatch('quick', 0));
   await page.waitForFunction(() => window.__padel.sim.phase === 'serve_ready', null, { timeout: 20000 });
   await page.waitForTimeout(400);
