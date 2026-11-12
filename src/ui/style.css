@@ -343,11 +343,12 @@ button {
   letter-spacing: 0.05em;
   touch-action: none;
 }
+/* Kept clear of the bottom-right corner, where the host's badge sits on free hosting plans. */
 .shot-btn.lob {
-  bottom: calc(96px + var(--safe-b));
+  bottom: calc(150px + var(--safe-b));
 }
 .shot-btn.smash {
-  bottom: calc(22px + var(--safe-b));
+  bottom: calc(76px + var(--safe-b));
   border-color: var(--accent);
   color: var(--accent);
 }
