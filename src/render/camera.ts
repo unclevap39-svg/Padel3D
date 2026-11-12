@@ -39,7 +39,7 @@ export class CameraRig {
       // The player's depth pulls the camera in a little when they come to the net.
       const depth = Math.max(0, Math.min(1, (8 - player.z) / 6));
       this.wantPos.set(player.x * 0.42 + bx * 0.12, 6.4 - depth * 0.4, 18 - depth * 2.4);
-      this.wantLook.set(player.x * 0.2 + bx * 0.4, 0.8 + Math.min(1.0, ball.y * 0.1), 4.1 - depth * 2.6 + bz * 0.05);
+      this.wantLook.set(player.x * 0.25 + bx * 0.25, 0.8 + Math.min(1.0, ball.y * 0.1), 4.1 - depth * 2.6 + bz * 0.05);
       if (this.focus > 0) {
         this.wantLook.lerp(new THREE.Vector3(bx, Math.min(2, ball.y * 0.5) + 0.4, bz), this.focus * 0.7);
       }
