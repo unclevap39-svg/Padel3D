@@ -4,3 +4,6 @@ dev-dist
 *.log
 .DS_Store
 shots
+
+# Local Netlify state written by the deploy tool
+.netlify
