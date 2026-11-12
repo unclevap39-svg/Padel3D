@@ -18,6 +18,28 @@ deux adversaires sont joués par l'ordinateur.
 - **Boutique et vestiaire** : raquettes, tenues, terrains et balles à débloquer avec les pièces
   gagnées en jouant. Il n'y a aucun achat en argent réel ; tout est enregistré sur l'appareil.
 
+## Jeu en ligne
+
+- **Modes** : classique et classé, en 2 contre 2 (chaque joueur avec un partenaire joué par
+  l'ordinateur) et en 1 contre 1 ; invitation d'un ami par code ou par lien.
+- **Fonctionnement** : une fonction Netlify (`netlify/functions/online.mts`, logique dans
+  `server/online.ts`, stockage Netlify Blobs) met les joueurs en relation, puis les deux
+  téléphones se connectent directement l'un à l'autre (WebRTC). L'un des deux fait tourner la
+  partie, l'autre la reçoit en miroir (`src/net/`).
+- **Classement** : points Elo séparés pour le 1v1 et le 2v2, mis à jour quand les deux joueurs
+  déclarent le même résultat.
+
+Limites à connaître :
+
+- Sans serveur relais, la connexion directe échoue entre certains réseaux mobiles très fermés ;
+  le jeu l'indique et propose de réessayer (le Wi-Fi fonctionne presque toujours).
+- La partie tourne sur le téléphone de l'un des joueurs : l'autre a un léger retard sur ses
+  propres gestes, et le classement repose sur la bonne foi des deux appareils (pas d'arbitre
+  serveur contre la triche).
+- Il faut que d'autres joueurs cherchent un match au même moment ; sinon, invitez un ami.
+
+En développement, `npm run dev` sert le salon en mémoire : deux onglets peuvent s'affronter.
+
 ## Lancer le projet
 
 ```bash
@@ -102,8 +124,11 @@ src/
   render/    Scène, terrain, textures procédurales, caméra, qualité adaptative
   input/     Joystick, geste de frappe, boutons, clavier, vibration
   audio/     Sons synthétisés (Web Audio) et annonce vocale du score
-  ui/        Accueil (modes, boutique, vestiaire, profil, réglages), HUD, menus
-tests/       Vitest : règles, physique, matchs complets
+  net/       Jeu en ligne : salon, connexion directe, hôte et invité
+  ui/        Accueil (modes, en ligne, boutique, vestiaire, profil, réglages), HUD, menus
+server/      Logique du salon en ligne (testable sans réseau)
+netlify/     Fonction serveur du salon
+tests/       Vitest : règles, physique, matchs complets, réseau, salon
 tools/       Construction du modèle de joueur et des icônes
 scripts/     Aides de vérification visuelle (captures Playwright)
 ```

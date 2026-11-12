@@ -51,7 +51,7 @@ export const CATALOG: ShopItem[] = [
 
 export const itemById = (id: string): ShopItem => CATALOG.find((i) => i.id === id) ?? CATALOG[0];
 
-export type ModeId = 'quick' | 'full' | 'tiebreak' | 'tournament' | 'training' | 'daily';
+export type ModeId = 'quick' | 'full' | 'tiebreak' | 'tournament' | 'training' | 'daily' | 'online' | 'ranked';
 
 export interface GameMode {
   id: ModeId;
@@ -66,6 +66,8 @@ export interface GameMode {
   winCoins: number;
   lossCoins: number;
   winXp: number;
+  /** Not offered in the list of solo modes (online matches). */
+  hidden?: boolean;
 }
 
 export const MODES: GameMode[] = [
@@ -74,6 +76,8 @@ export const MODES: GameMode[] = [
   { id: 'tiebreak', name: 'Tie-break', tagline: 'Premier à 7', detail: 'Un tie-break sec, deux points d’écart. Idéal pour une partie éclair.', match: { setsToWin: 1, tiebreakAt: 0 }, difficulty: null, assist: null, winCoins: 60, lossCoins: 15, winXp: 60 },
   { id: 'tournament', name: 'Tournoi', tagline: '3 tours', detail: 'Quart, demi, finale : chaque tour est plus dur. Gagnez la finale pour le trophée.', match: { setsToWin: 1 }, difficulty: 'easy', assist: null, winCoins: 150, lossCoins: 40, winXp: 180 },
   { id: 'training', name: 'Entraînement', tagline: 'Sans pression', detail: 'Adversaires faciles et aide au placement maximale pour prendre le jeu en main.', match: { setsToWin: 1 }, difficulty: 'easy', assist: 1, winCoins: 30, lossCoins: 10, winXp: 40 },
+  { id: 'online', name: 'Match en ligne', tagline: 'Classique', detail: 'Un set contre un autre joueur.', match: { setsToWin: 1 }, difficulty: 'medium', assist: null, winCoins: 100, lossCoins: 30, winXp: 120, hidden: true },
+  { id: 'ranked', name: 'Match classé', tagline: 'Classé', detail: 'Un set contre un autre joueur, avec points de classement.', match: { setsToWin: 1 }, difficulty: 'medium', assist: null, winCoins: 150, lossCoins: 40, winXp: 160, hidden: true },
   { id: 'daily', name: 'Défi du jour', tagline: 'Bonus quotidien', detail: 'Un tie-break contre des adversaires difficiles. Une récompense par jour.', match: { setsToWin: 1, tiebreakAt: 0 }, difficulty: 'hard', assist: null, winCoins: 300, lossCoins: 20, winXp: 200 },
 ];
 
@@ -111,6 +115,8 @@ export interface Profile {
   /** Local date (YYYY-MM-DD) on which the daily challenge reward was last won. */
   dailyDone: string;
   lastMode: ModeId;
+  /** Solo matches: doubles with an AI partner, or one against one. */
+  format: 'double' | 'single';
 }
 
 const KEY = 'padel3d.profile.v1';
@@ -126,6 +132,7 @@ export function defaultProfile(): Profile {
     tournamentRound: 0,
     dailyDone: '',
     lastMode: 'quick',
+    format: 'double',
   };
 }
 
@@ -142,6 +149,8 @@ export function loadProfile(): Profile {
       stats: { ...base.stats, ...(p.stats ?? {}) },
       owned: Array.from(new Set([...base.owned, ...(p.owned ?? [])])),
     };
+    if (!MODES.some((m) => m.id === merged.lastMode && !m.hidden)) merged.lastMode = 'quick';
+    if (merged.format !== 'single') merged.format = 'double';
     // Never trust stored ids blindly: an equipped item must exist and be owned.
     for (const kind of Object.keys(base.equipped) as ItemKind[]) {
       const id = merged.equipped[kind];
@@ -270,7 +279,7 @@ export function applyMatch(p: Profile, m: MatchSummary): Rewards {
   s.aces += m.aces;
   s.winners += m.winners;
   s.longestRally = Math.max(s.longestRally, m.longestRally);
-  p.lastMode = m.mode;
+  if (!mode.hidden) p.lastMode = m.mode;
   saveProfile(p);
   return { coins, xp, levelBefore, levelAfter, notes };
 }

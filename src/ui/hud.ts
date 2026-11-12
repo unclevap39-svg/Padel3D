@@ -78,6 +78,12 @@ export class Hud {
     this.bannerTimer = window.setTimeout(() => this.banner.parentElement!.classList.remove('show'), seconds * 1000);
   }
 
+  /** Names shown on the two scoreboard rows. */
+  setNames(mine: string, theirs: string): void {
+    (this.rows[0].querySelector('.team') as HTMLElement).textContent = mine.toUpperCase();
+    (this.rows[1].querySelector('.team') as HTMLElement).textContent = theirs.toUpperCase().slice(0, 14);
+  }
+
   /** Removes the centre message at once (before a full-screen panel opens). */
   clearBanner(): void {
     window.clearTimeout(this.bannerTimer);

@@ -59,6 +59,12 @@ async function boot(): Promise<void> {
   game.start();
   (window as unknown as { __padel: unknown }).__padel = game;
   if (params.has('autoplay')) game.startMatch();
+  // Invitation link: ?room=CODE joins that game straight away.
+  const room = params.get('room');
+  if (room && /^[A-Za-z0-9]{5}$/.test(room)) {
+    history.replaceState(null, '', location.pathname);
+    game.joinInvitation(room);
+  }
 }
 
 boot().catch((err) => {

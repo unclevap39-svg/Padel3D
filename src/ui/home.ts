@@ -15,9 +15,10 @@ import {
 } from '../core/profile';
 import { type Settings, saveSettings } from '../core/settings';
 import type { Difficulty } from '../core/types';
+import type { LeaderRow, LobbyState, OnlineProfile, QueueMode } from '../net/lobby';
 import { isStandalone } from './menu';
 
-export type HomeTab = 'play' | 'shop' | 'locker' | 'profile' | 'settings';
+export type HomeTab = 'play' | 'online' | 'shop' | 'locker' | 'profile' | 'settings';
 
 export interface HomeCallbacks {
   onPlay: (mode: ModeId) => void;
@@ -27,6 +28,12 @@ export interface HomeCallbacks {
   onTab: (tab: HomeTab) => void;
   onHelp: () => void;
   onInstall: () => void;
+  /** Online lobby actions. */
+  onQueue: (mode: QueueMode) => void;
+  onInvite: (kind: '1' | '2') => void;
+  onJoin: (code: string) => void;
+  onCancelOnline: () => void;
+  onBoard: (kind: '1' | '2') => Promise<LeaderRow[] | null>;
 }
 
 const ICONS = {
@@ -37,11 +44,13 @@ const ICONS = {
   profile: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 20.500c.8-4 3.700-6 7.500-6s6.700 2 7.500 6" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round"/></svg>',
   settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.200" fill="none" stroke="currentColor" stroke-width="1.800"/><path d="M12 2.800v3M12 18.200v3M2.800 12h3M18.200 12h3M5.500 5.500l2.100 2.100M16.400 16.400l2.100 2.100M5.500 18.500l2.100-2.100M16.400 7.600l2.100-2.100" stroke="currentColor" stroke-width="1.800" stroke-linecap="round"/></svg>',
   trophy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1.500A3.500 3.500 0 0 0 7.500 11M17 6h3v1.500a3.500 3.500 0 0 1-3.500 3.500M12 14v4M8.500 20h7" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 12h18M12 3c3 3.2 3 14.800 0 18M12 3c-3 3.200-3 14.800 0 18" fill="none" stroke="currentColor" stroke-width="1.800"/></svg>',
   check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.500l4.500 4.500L19 7.500" fill="none" stroke="currentColor" stroke-width="2.600" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 const TABS: Array<[HomeTab, string, string]> = [
   ['play', 'Accueil', ICONS.play],
+  ['online', 'En ligne', ICONS.globe],
   ['shop', 'Boutique', ICONS.shop],
   ['locker', 'Vestiaire', ICONS.locker],
   ['profile', 'Profil', ICONS.profile],
@@ -82,6 +91,10 @@ export class Home {
   private kind: ItemKind = 'racket';
   /** Item highlighted in the shop or locker (tried on, not necessarily owned). */
   private selected: string | null = null;
+  private lobby: LobbyState = { kind: 'idle' };
+  private online: OnlineProfile | null = null;
+  private board: { kind: '1' | '2'; rows: LeaderRow[] | null; loading: boolean } | null = null;
+  private timer = 0;
 
   constructor(parent: HTMLElement, settings: Settings, profile: Profile, cb: HomeCallbacks) {
     this.settings = settings;
@@ -98,6 +111,7 @@ export class Home {
     this.root.addEventListener('click', (e) => this.click(e));
     this.root.addEventListener('input', (e) => this.input(e));
     this.root.addEventListener('change', (e) => this.change(e));
+    this.root.addEventListener('submit', (e) => this.submit(e));
   }
 
   get visible(): boolean {
@@ -112,6 +126,35 @@ export class Home {
       this.cb.onLoadout(this.profile.equipped);
       this.cb.onTab(this.tab);
     }
+  }
+
+  /** Shows a section directly (used when a match ends or an invitation link is opened). */
+  open(tab: HomeTab): void {
+    this.tab = tab;
+    if (this.visible) {
+      this.cb.onTab(tab);
+      this.render();
+    }
+  }
+
+  /** Online lobby state changed: searching, waiting for a friend, connecting, error… */
+  setLobby(state: LobbyState, profile: OnlineProfile | null): void {
+    this.lobby = state;
+    this.online = profile ?? this.online;
+    if (state.kind !== 'idle') this.board = null;
+    window.clearInterval(this.timer);
+    if (state.kind === 'searching') {
+      this.timer = window.setInterval(() => {
+        const el = this.body.querySelector('.search-time');
+        if (el) el.textContent = this.elapsed(state.since);
+      }, 1000);
+    }
+    if (this.visible && this.tab === 'online') this.render();
+  }
+
+  private elapsed(since: number): string {
+    const s = Math.max(0, Math.floor((Date.now() - since) / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   }
 
   /** Re-draw after coins, level or settings changed elsewhere. */
@@ -149,6 +192,7 @@ export class Home {
     ).join('');
     let html = '';
     if (this.tab === 'play') html = this.renderPlay();
+    else if (this.tab === 'online') html = this.renderOnline();
     else if (this.tab === 'shop') html = this.renderItems(false);
     else if (this.tab === 'locker') html = this.renderItems(true);
     else if (this.tab === 'profile') html = this.renderProfile();
@@ -159,7 +203,7 @@ export class Home {
   private renderPlay(): string {
     const p = this.profile;
     const mode = modeById(this.mode);
-    const cards = MODES.map((m) => {
+    const cards = MODES.filter((m) => !m.hidden).map((m) => {
       let badge = '';
       if (m.id === 'tournament') badge = `<em class="badge">${p.tournamentRound + 1}/3</em>`;
       if (m.id === 'daily') badge = p.dailyDone === today() ? `<em class="badge done">${ICONS.check}</em>` : '<em class="badge hot">+300</em>';
@@ -189,9 +233,116 @@ export class Home {
         <h2>${mode.name}</h2>
         <p>${mode.detail}</p>
         ${extra}
-        <div class="detail-row">${difficulty}<div class="reward">${reward}</div></div>
+        <div class="detail-row">
+          <div class="seg format" role="group" aria-label="Format">
+            <button data-format="double" class="${p.format === 'double' ? 'on' : ''}">Double 2v2</button>
+            <button data-format="single" class="${p.format === 'single' ? 'on' : ''}">Simple 1v1</button>
+          </div>
+          ${difficulty}<div class="reward">${reward}</div>
+        </div>
       </div>
       <button class="play-btn" data-act="play"><span>Jouer</span>${ICONS.play}</button>`;
+  }
+
+  private renderOnline(): string {
+    const st = this.lobby;
+    const o = this.online;
+    const ratings = o ? `<small>Classement · 1v1 <b>${o.r1}</b> · 2v2 <b>${o.r2}</b></small>` : '<small>Affrontez d’autres joueurs en direct</small>';
+    const head = `<div class="kicker">En ligne${ratings}</div>`;
+    const labels: Record<QueueMode, string> = { c2: 'Classique 2v2', r2: 'Classé 2v2', c1: 'Classique 1v1', r1: 'Classé 1v1' };
+    if (st.kind === 'searching') {
+      return `${head}
+        <div class="lobby-wait">
+          <div class="pulse" aria-hidden="true"></div>
+          <h2>Recherche d’un adversaire</h2>
+          <p>${labels[st.mode]} · <span class="search-time">${this.elapsed(st.since)}</span></p>
+          <p class="hint">Le match démarre dès qu’un autre joueur cherche le même mode. Peu de monde en ligne ? Invitez un ami avec un code.</p>
+          <button class="ghost-btn" data-act="cancel-online">Annuler</button>
+        </div>`;
+    }
+    if (st.kind === 'hosting') {
+      return `${head}
+        <div class="lobby-wait">
+          <h2>Code de la partie</h2>
+          <div class="room-code" aria-label="Code">${st.code.split('').map((c) => `<span>${c}</span>`).join('')}</div>
+          <p>${st.mode === 'i1' ? 'Un contre un' : 'Double : chacun joue avec un partenaire IA'} · en attente de votre ami…</p>
+          <div class="settings-actions">
+            <button class="act-btn primary" data-act="share" data-code="${st.code}">Envoyer l’invitation</button>
+            <button class="ghost-btn" data-act="cancel-online">Annuler</button>
+          </div>
+        </div>`;
+    }
+    if (st.kind === 'joining' || st.kind === 'connecting') {
+      const who = st.kind === 'connecting' && st.opponent ? `Connexion à ${esc(st.opponent)}…` : 'Connexion…';
+      return `${head}
+        <div class="lobby-wait">
+          <div class="pulse" aria-hidden="true"></div>
+          <h2>${who}</h2>
+          <p class="hint">Mise en relation directe de vos deux appareils.</p>
+          <button class="ghost-btn" data-act="cancel-online">Annuler</button>
+        </div>`;
+    }
+    if (st.kind === 'error') {
+      return `${head}
+        <div class="lobby-wait">
+          <h2>Connexion impossible</h2>
+          <p>${esc(st.message)}</p>
+          <button class="act-btn primary" data-act="cancel-online">OK</button>
+        </div>`;
+    }
+    if (this.board) {
+      const b = this.board;
+      const rows = b.loading
+        ? '<p class="hint">Chargement…</p>'
+        : !b.rows
+          ? '<p class="hint">Classement indisponible pour le moment.</p>'
+          : b.rows.length === 0
+            ? '<p class="hint">Aucun match classé joué pour l’instant. Soyez le premier !</p>'
+            : `<ol class="board">${b.rows.map((r, i) => `<li><span class="rank">${i + 1}</span><span class="who">${esc(r.name)}</span><span class="wl">${r.wins} V · ${r.losses} D</span><b>${r.rating}</b></li>`).join('')}</ol>`;
+      return `${head}
+        <div class="chips">
+          <button data-board="2" class="${b.kind === '2' ? 'on' : ''}">Classement 2v2</button>
+          <button data-board="1" class="${b.kind === '1' ? 'on' : ''}">Classement 1v1</button>
+          <button data-act="close-board">Retour</button>
+        </div>
+        <div class="board-wrap">${rows}</div>`;
+    }
+    const card = (mode: QueueMode, sub: string, ranked: boolean) =>
+      `<button class="mode-card online-card ${ranked ? 'ranked' : ''}" data-queue="${mode}"><span class="mc-name">${labels[mode]}</span><span class="mc-tag">${sub}</span></button>`;
+    return `${head}
+      <div class="mode-grid two">
+        ${card('c2', 'Vous + un partenaire IA', false)}
+        ${card('r2', 'Compte pour le classement', true)}
+        ${card('c1', 'Seul contre seul', false)}
+        ${card('r1', 'Compte pour le classement', true)}
+      </div>
+      <div class="invite">
+        <div class="invite-col">
+          <span class="label">Jouer avec un ami</span>
+          <div class="settings-actions">
+            <button class="ghost-btn" data-invite="1">Inviter en 1v1</button>
+            <button class="ghost-btn" data-invite="2">Inviter en 2v2</button>
+          </div>
+        </div>
+        <form class="invite-col join" data-join>
+          <label class="label" for="join-code">Rejoindre avec un code</label>
+          <div class="settings-actions">
+            <input id="join-code" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="5" placeholder="CODE" />
+            <button class="act-btn primary" type="submit">Rejoindre</button>
+          </div>
+        </form>
+      </div>
+      <div class="settings-actions"><button class="ghost-btn" data-act="board">${ICONS.trophy} Classement</button></div>`;
+  }
+
+  private async loadBoard(kind: '1' | '2'): Promise<void> {
+    this.board = { kind, rows: null, loading: true };
+    this.render();
+    const rows = await this.cb.onBoard(kind);
+    if (this.board && this.board.kind === kind) {
+      this.board = { kind, rows, loading: false };
+      if (this.tab === 'online') this.render();
+    }
   }
 
   private renderItems(ownedOnly: boolean): string {
@@ -286,7 +437,8 @@ export class Home {
 
   private click(e: Event): void {
     const t = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
-    if (!t || t.disabled) return;
+    // The join form's own button submits the form; every other button is handled here.
+    if (!t || t.disabled || t.closest('form')) return;
     const d = t.dataset;
     if (d.tab) return this.setTab(d.tab as HomeTab);
     if (d.mode) {
@@ -295,6 +447,14 @@ export class Home {
       saveProfile(this.profile);
       return this.render();
     }
+    if (d.format) {
+      this.profile.format = d.format === 'single' ? 'single' : 'double';
+      saveProfile(this.profile);
+      return this.render();
+    }
+    if (d.queue) return this.cb.onQueue(d.queue as QueueMode);
+    if (d.invite) return this.cb.onInvite(d.invite === '1' ? '1' : '2');
+    if (d.board) return void this.loadBoard(d.board === '1' ? '1' : '2');
     if (d.diff) {
       this.settings.difficulty = d.diff as Difficulty;
       saveSettings(this.settings);
@@ -329,6 +489,19 @@ export class Home {
           this.render();
         }
         break;
+      case 'cancel-online':
+        this.cb.onCancelOnline();
+        break;
+      case 'board':
+        void this.loadBoard('2');
+        break;
+      case 'close-board':
+        this.board = null;
+        this.render();
+        break;
+      case 'share':
+        void this.share(d.code ?? '');
+        break;
       case 'help':
         this.cb.onHelp();
         break;
@@ -336,6 +509,30 @@ export class Home {
         this.cb.onInstall();
         break;
     }
+  }
+
+  /** Sends the invitation through the phone's share sheet, or copies the link. */
+  private async share(code: string): Promise<void> {
+    const url = `${location.origin}${location.pathname}?room=${code}`;
+    const text = `Rejoins-moi sur Padel 3D ! Code : ${code}`;
+    try {
+      if (navigator.share) await navigator.share({ title: 'Padel 3D', text, url });
+      else {
+        await navigator.clipboard.writeText(`${text} — ${url}`);
+        const btn = this.body.querySelector('[data-act=share]');
+        if (btn) btn.textContent = 'Lien copié';
+      }
+    } catch {
+      // Share sheet dismissed: nothing to do.
+    }
+  }
+
+  private submit(e: Event): void {
+    const form = (e.target as HTMLElement).closest('[data-join]');
+    if (!form) return;
+    e.preventDefault();
+    const code = (form.querySelector('input') as HTMLInputElement).value;
+    if (code.trim().length >= 4) this.cb.onJoin(code);
   }
 
   private input(e: Event): void {

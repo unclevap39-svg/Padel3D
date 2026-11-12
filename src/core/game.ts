@@ -4,6 +4,10 @@ import { BallView } from '../entities/ball';
 import { CharacterView, type Outfit } from '../entities/character';
 import { SkinnedBody, loadPlayerModel } from '../entities/skinned';
 import { TouchControls, vibrate } from '../input/touch';
+import { GuestSim } from '../net/guest';
+import { HostSession } from '../net/host';
+import { Lobby, type MatchInfo } from '../net/lobby';
+import type { GuestMsg, HelloMsg, HostMsg, Link, NetMsg } from '../net/protocol';
 import { TICK_DT } from '../physics/world';
 import { AdaptiveQuality } from '../render/adaptive';
 import { CameraRig } from '../render/camera';
@@ -74,7 +78,10 @@ export class Game {
   readonly home: Home;
   readonly profile: Profile;
   readonly controls: TouchControls;
-  sim: Simulation;
+  sim: Simulation | GuestSim;
+  readonly lobby = new Lobby();
+  /** The online match in progress, if any. */
+  private net: { info: MatchInfo; link: Link; host: HostSession | null; ended: boolean } | null = null;
   private settings: Settings;
   private ball = new BallView();
   private characters: CharacterView[] = [];
@@ -134,7 +141,23 @@ export class Game {
         this.home.show(false);
         this.menu.show('install', { inMatch: false });
       },
+      onQueue: (mode) => {
+        this.sound.unlock();
+        void this.lobby.search(mode);
+      },
+      onInvite: (kind) => {
+        this.sound.unlock();
+        void this.lobby.createRoom(kind);
+      },
+      onJoin: (code) => {
+        this.sound.unlock();
+        void this.lobby.joinRoom(code);
+      },
+      onCancelOnline: () => this.lobby.cancel(),
+      onBoard: (kind) => this.lobby.leaderboard(kind),
     });
+    this.lobby.onState = (state) => this.home.setLobby(state, this.lobby.profile);
+    this.lobby.onMatch = (info, link) => this.startOnline(info, link);
     this.menu = new Menu(opts.ui, this.settings, {
       onPlay: () => this.startMatch(this.mode),
       onResume: () => this.resume(),
@@ -204,7 +227,8 @@ export class Game {
         this.modeAssist = m.assist;
       }
     }
-    return new Simulation({ difficulty, assist, humanControlled: human, match: m?.match });
+    const singles = !!m && this.profile.format === 'single';
+    return new Simulation({ difficulty, assist, humanControlled: human, match: m?.match, singles });
   }
 
   /** Puts shop items on your pair, your racket, the ball and the court. */
@@ -233,13 +257,184 @@ export class Game {
   showHome(): void {
     this.menu.show(null, { inMatch: false });
     this.home.show(true);
+    // Refresh the online profile (ratings) in the background; the lobby works without it.
+    void this.lobby.hello(this.profile.name).then((p) => p && this.home.setLobby(this.lobby.state, p));
+  }
+
+  /** Opened from an invitation link: go straight to the online tab and join that room. */
+  joinInvitation(code: string): void {
+    this.showHome();
+    this.home.open('online');
+    void this.lobby.joinRoom(code);
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Online matches
+
+  private look(): HelloMsg {
+    const e = this.profile.equipped;
+    const outfit = itemById(e.outfit);
+    const racket = itemById(e.racket);
+    return {
+      k: 'hello',
+      name: this.profile.name,
+      look: { shirt: outfit.color, shorts: outfit.color2 ?? 0x15171c, racket: racket.color, frame: racket.color2 ?? 0x14161a },
+      assist: this.settings.assist,
+    };
+  }
+
+  /** A direct link to the other player is open: start the match as host or as guest. */
+  private startOnline(info: MatchInfo, link: Link): void {
+    const singles = info.mode.endsWith('1');
+    const ranked = info.mode[0] === 'r';
+    this.mode = ranked ? 'ranked' : 'online';
+    this.summary = { mode: this.mode, won: false, pointsWon: 0, pointsLost: 0, aces: 0, winners: 0, longestRally: 0 };
+    this.modeAssist = null;
+    this.applyLoadout(this.profile.equipped);
+    let host: HostSession | null = null;
+    if (info.role === 'host') {
+      const sim = new Simulation({
+        difficulty: 'medium',
+        assist: this.settings.assist,
+        humanControlled: false,
+        humans: [0, 2],
+        assistBy: {},
+        singles,
+        match: { setsToWin: 1 },
+      });
+      sim.startMatch();
+      this.sim = sim;
+      host = new HostSession(sim, link);
+    } else {
+      this.sim = new GuestSim(link);
+    }
+    this.net = { info, link, host, ended: false };
+    link.onMessage = (msg: NetMsg) => {
+      if (msg.k === 'hello') return this.opponentHello(msg);
+      if (msg.k === 'bye') return this.opponentLeft();
+      if (host) host.receive(msg as GuestMsg);
+      else (this.sim as GuestSim).receive(msg as HostMsg);
+    };
+    link.onClose = () => this.opponentLeft();
+    link.send(this.look());
+    host?.sendStart();
+
+    this.home.show(false);
+    this.menu.show(null, { inMatch: true });
+    this.playing = true;
+    this.paused = false;
+    this.timeScale = 1;
+    this.slowUntil = 0;
+    this.acc = 0;
+    this.camera.orbit = false;
+    this.camera.hero = null;
+    this.camera.focus = 0;
+    this.camera.snap(this.stage.camera, this.sim.players[0]);
+    this.hud.show(true);
+    this.hud.setNames('VOUS', info.opponent.name);
+    this.controls.setEnabled(true);
+    this.hud.updateScore(this.sim.match.scoring, this.sim.match.referee.server);
+    this.hud.flash(ranked ? 'Match classé' : 'Match en ligne', `Contre ${info.opponent.name}`, 2.6);
+    this.ball.reset();
+    this.sound.startCrowd();
+    void this.requestLandscape();
+  }
+
+  /** The other player's name, colours and assist setting. */
+  private opponentHello(msg: HelloMsg): void {
+    const look = msg.look ?? { shirt: 0xd8362f, shorts: 0x15171c, racket: 0xd8ef2f, frame: 0x14161a };
+    const num = (v: unknown, fallback: number) => (typeof v === 'number' && v >= 0 && v <= 0xffffff ? Math.floor(v) : fallback);
+    // Two pairs in the same shirt would be impossible to tell apart: the opponents then keep the default red.
+    const mine = itemById(this.profile.equipped.outfit).color;
+    const theirs = num(look.shirt, OUTFITS[2].shirt);
+    const dist = Math.hypot(((mine >> 16) & 255) - ((theirs >> 16) & 255), ((mine >> 8) & 255) - ((theirs >> 8) & 255), (mine & 255) - (theirs & 255));
+    for (const i of [2, 3]) {
+      const own = dist > 90;
+      this.characters[i].setOutfit({ ...OUTFITS[i], shirt: own ? theirs : OUTFITS[i].shirt, shorts: own ? num(look.shorts, OUTFITS[i].shorts) : OUTFITS[i].shorts });
+    }
+    this.characters[2].setRacket(num(look.racket, 0xd8ef2f), num(look.frame, 0x14161a));
+    if (this.net?.host && this.sim instanceof Simulation && typeof msg.assist === 'number') {
+      this.sim.config.assistBy = { 2: Math.max(0, Math.min(1, msg.assist)) };
+    }
+  }
+
+  /** The link dropped or the opponent quit: the player who stayed wins. */
+  private opponentLeft(): void {
+    if (!this.net || this.net.ended || !this.playing) return;
+    this.hud.flash('Adversaire déconnecté', 'Victoire par abandon', 2.5);
+    this.finishOnline(true, true);
+  }
+
+  private finishOnline(won: boolean, forfeit: boolean): void {
+    const net = this.net;
+    if (!net || net.ended) return;
+    net.ended = true;
+    this.summary.won = won;
+    const ranked = net.info.mode[0] === 'r';
+    const s = this.sim.match.scoring;
+    const score = forfeit ? 'abandon' : s.completedSets.map((x) => `${x[0]}-${x[1]}`).join('  ');
+    const r = applyMatch(this.profile, this.summary);
+    this.controls.setEnabled(false);
+    this.playing = false;
+    this.hud.setPrompt(null);
+    const coin =
+      '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#f6c93a"/><circle cx="10" cy="10" r="6.2" fill="none" stroke="#b8860b" stroke-width="1.4"/></svg>';
+    window.setTimeout(
+      () => {
+        this.hud.clearBanner();
+        this.menu.show('end', {
+          inMatch: false,
+          online: true,
+          endHtml: `
+            <div class="result-kicker">${ranked ? 'Match classé' : 'Match en ligne'} · ${net.info.opponent.name}</div>
+            <h2 class="result-title ${won ? '' : 'lost'}">${won ? 'Victoire' : 'Défaite'}</h2>
+            <p class="final-score">Score : <b>${score}</b></p>
+            <div class="gains">
+              <div class="gain">${coin}<b>+${r.coins}</b> pièces</div>
+              <div class="gain"><b>+${r.xp}</b> XP</div>
+              ${ranked ? '<div class="gain" id="rating-gain">Classement…</div>' : ''}
+            </div>`,
+        });
+      },
+      forfeit ? 1800 : 0,
+    );
+    if (ranked) {
+      const winnerRole = won ? net.info.role : net.info.role === 'host' ? 'guest' : 'host';
+      void this.lobby.reportResult(net.info.matchId, winnerRole).then((res) => {
+        const el = document.getElementById('rating-gain');
+        if (!el) return;
+        el.innerHTML = res ? `<b>${res.delta >= 0 ? '+' : ''}${res.delta}</b> classement · ${res.rating}` : 'Classement inchangé';
+      });
+    }
+    // Keep the link open a moment so the last events reach the other side, then hang up.
+    window.setTimeout(() => {
+      net.link.send({ k: 'bye' });
+      net.link.onClose = () => {};
+      net.link.close();
+    }, 1500);
+  }
+
+  /** Leaves an online match in progress (counts as a defeat). */
+  private abandonOnline(): void {
+    const net = this.net;
+    if (!net) return;
+    if (!net.ended && this.playing) {
+      net.ended = true;
+      this.summary.won = false;
+      applyMatch(this.profile, this.summary);
+      if (net.info.mode[0] === 'r') void this.lobby.reportResult(net.info.matchId, net.info.role === 'host' ? 'guest' : 'host');
+      net.link.send({ k: 'bye' });
+    }
+    net.link.onClose = () => {};
+    window.setTimeout(() => net.link.close(), 300);
+    this.net = null;
   }
 
   private applySettings(): void {
     const s = this.settings;
     this.sound.setEnabled(s.sound);
     this.sound.voice = s.voice;
-    if (this.sim && this.modeAssist === null) this.sim.config.assist = s.assist;
+    if (this.sim && this.modeAssist === null && !this.net) this.sim.config.assist = s.assist;
     if (!this.opts.forceTier) {
       this.adaptive.enabled = s.quality === 'auto';
       if (s.quality !== 'auto' && this.stage.tier !== s.quality) {
@@ -256,14 +451,19 @@ export class Game {
   }
 
   startMatch(mode: ModeId = this.mode, firstServer?: 0 | 2): void {
+    // "Play again" after an online match goes back to the lobby rather than starting a solo game.
+    if (modeById(mode).hidden) return this.toMenu();
+    this.net = null;
+    this.hud.setNames('VOUS', 'ADVERSAIRES');
     this.sound.unlock();
     this.sound.startCrowd();
     this.mode = mode;
     this.summary = { mode, won: false, pointsWon: 0, pointsLost: 0, aces: 0, winners: 0, longestRally: 0 };
     this.applyLoadout(this.profile.equipped);
     this.home.show(false);
-    this.sim = this.makeSim(true, mode);
-    this.sim.startMatch(firstServer);
+    const sim = this.makeSim(true, mode);
+    sim.startMatch(firstServer);
+    this.sim = sim;
     for (const c of this.characters) c.animator.yaw = 0;
     this.playing = true;
     this.paused = false;
@@ -300,7 +500,8 @@ export class Game {
 
   pause(): void {
     if (!this.playing || this.paused) return;
-    this.paused = true;
+    // An online match cannot be paused: the menu opens over the live game.
+    this.paused = !this.net;
     this.controls.setEnabled(false);
     this.menu.show('pause', { inMatch: true });
   }
@@ -313,6 +514,8 @@ export class Game {
   }
 
   toMenu(): void {
+    const wasOnline = this.net !== null;
+    this.abandonOnline();
     this.playing = false;
     this.paused = false;
     this.controls.setEnabled(false);
@@ -324,7 +527,10 @@ export class Game {
     this.camera.focus = 0;
     this.timeScale = 1;
     this.camera.snap(this.stage.camera, this.sim.players[0]);
+    for (const c of this.characters) c.group.visible = true;
+    this.applyLoadout(this.profile.equipped);
     this.showHome();
+    if (wasOnline) this.home.open('online');
   }
 
   start(): void {
@@ -344,7 +550,7 @@ export class Game {
     this.clock += dt;
     if (!this.paused) {
       // Slow motion eases in and out.
-      const target = this.clock < this.slowUntil ? 0.28 : 1;
+      const target = this.clock < this.slowUntil && !this.net ? 0.28 : 1;
       this.timeScale += (target - this.timeScale) * Math.min(1, dt * 6);
       this.camera.focus += ((this.clock < this.slowUntil ? 1 : 0) - this.camera.focus) * Math.min(1, dt * 4);
       const simDt = dt * this.timeScale * this.debugTimeScale;
@@ -358,7 +564,10 @@ export class Game {
         steps++;
       }
       if (steps === 12) this.acc = 0;
-      this.handleEvents(this.sim.drainEvents());
+      if (this.sim instanceof GuestSim) this.sim.sync(dt);
+      const events = this.sim.drainEvents();
+      this.net?.host?.afterFrame(events, dt);
+      this.handleEvents(events);
 
       const b = this.sim.world.ball;
       this.ballPos.x = b.px;
@@ -366,7 +575,9 @@ export class Game {
       this.ballPos.z = b.pz;
       const live = this.sim.phase === 'rally' || this.sim.phase === 'serve_motion';
       for (let i = 0; i < 4; i++) {
-        this.characters[i].update(simDt, this.sim.players[i], this.sim.now, this.ballPos, live);
+        const p = this.sim.players[i];
+        this.characters[i].group.visible = p.active;
+        if (p.active) this.characters[i].update(simDt, p, this.sim.now, this.ballPos, live);
       }
       this.ball.update(b, this.sim.world.ballRotation(), this.stage.camera);
       this.camera.update(this.stage.camera, dt, this.sim.players[0], this.ballPos);
@@ -415,7 +626,10 @@ export class Game {
           break;
         case 'phase':
           if (e.phase === 'serve_motion' || e.phase === 'rally') this.hud.setPrompt(null);
-          if (e.phase === 'match_over' && live) this.endMatch();
+          if (e.phase === 'match_over' && live) {
+            if (this.net) this.finishOnline(this.sim.match.scoring.matchWinner === 0, false);
+            else this.endMatch();
+          }
           break;
         case 'fault':
           if (!live) break;

@@ -45,6 +45,8 @@ export class Menu {
   private screen: Screen = null;
   private inMatch = false;
   private endHtml = '';
+  /** The finished match was online: "play again" returns to the lobby. */
+  private online = false;
 
   constructor(parent: HTMLElement, settings: Settings, cb: MenuCallbacks) {
     this.settings = settings;
@@ -65,7 +67,9 @@ export class Menu {
     return this.screen;
   }
 
-  show(screen: Screen, opts: { inMatch?: boolean; endHtml?: string } = {}): void {
+  show(screen: Screen, opts: { inMatch?: boolean; endHtml?: string; online?: boolean } = {}): void {
+    if (opts.online !== undefined) this.online = opts.online;
+    else if (screen === 'end') this.online = false;
     if (opts.inMatch !== undefined) this.inMatch = opts.inMatch;
     if (screen === 'main') {
       screen = null;
@@ -154,8 +158,8 @@ export class Menu {
         html = `
           <div class="panel">
             ${this.endHtml}
-            <button class="primary" data-act="play">Rejouer</button>
-            <div class="row"><button data-act="quit">Menu</button></div>
+            <button class="primary" data-act="${this.online ? 'quit' : 'play'}">${this.online ? 'Retour au salon' : 'Rejouer'}</button>
+            ${this.online ? '' : '<div class="row"><button data-act="quit">Menu</button></div>'}
           </div>`;
         break;
       case 'install': {
