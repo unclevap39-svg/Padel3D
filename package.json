@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@dimforge/rapier3d": "^0.21.0",
+    "@netlify/blobs": "^11.1.9",
+    "@netlify/functions": "^6.1.1",
     "three": "^0.187.0"
   },
   "devDependencies": {

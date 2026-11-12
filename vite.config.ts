@@ -1,6 +1,39 @@
 import { VitePWA } from 'vite-plugin-pwa';
 import wasm from 'vite-plugin-wasm';
-import { defineConfig } from 'vitest/config';
+import { type Plugin, defineConfig } from 'vitest/config';
+import { handle, memoryKV } from './server/online.ts';
+
+/** Serves the online lobby in development and preview, with an in-memory store. */
+function lobbyDevServer(): Plugin {
+  const kv = memoryKV();
+  const mount = (middlewares: { use: (path: string, fn: (req: any, res: any) => void) => unknown }): void => {
+    middlewares.use('/api/online', (req, res) => {
+      let text = '';
+      req.on('data', (chunk: unknown) => (text += String(chunk)));
+      req.on('end', async () => {
+        let body: unknown = null;
+        try {
+          body = JSON.parse(text);
+        } catch {
+          // handled below as a bad request
+        }
+        const reply = await handle(kv, body, Date.now());
+        res.statusCode = reply.status;
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify(reply.body));
+      });
+    });
+  };
+  return {
+    name: 'padel3d-lobby-dev',
+    configureServer(server) {
+      mount(server.middlewares);
+    },
+    configurePreviewServer(server) {
+      mount(server.middlewares);
+    },
+  };
+}
 
 export default defineConfig({
   // Relative URLs: the build works at a domain root (Netlify) or in a sub-folder.
@@ -17,6 +50,7 @@ export default defineConfig({
   },
   plugins: [
     wasm(),
+    lobbyDevServer(),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',

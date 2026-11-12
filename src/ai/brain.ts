@@ -83,7 +83,7 @@ export class Ai {
     const hitter = sim.hitterId !== null ? sim.players[sim.hitterId] : null;
     const hitterPlan = hitter ? sim.plans[hitter.id] : null;
 
-    for (const p of sim.players) {
+    for (const p of sim.active) {
       if (p.isHuman) continue;
       const lvl = sim.levelOf(p);
       // Reaction time: keep doing what we were doing for a moment after the opponents strike.
@@ -127,6 +127,11 @@ export class Ai {
     const wantNet = sim.aggressive[p.team] && oppDeep;
     let z: number;
     let x: number;
+    if (sim.singles) {
+      // Alone on the side: hold the middle, a little towards the ball, and come in less.
+      const zs = wantNet ? 4.2 : oppAttacking ? 8.2 : 7.2;
+      return { x: clamp(ballX * 0.3, -3.5, 3.5), z: zs * p.sideSign };
+    }
     if (wantNet) {
       z = 2.8;
       x = p.zone * 2.2 + ballX * 0.22;

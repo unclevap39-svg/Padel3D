@@ -14,6 +14,12 @@ export interface SimConfig {
   assist: number;
   /** False runs player 0 on AI as well (demo and tests). */
   humanControlled: boolean;
+  /** Players driven by people; overrides `humanControlled` (online: one per team). */
+  humans?: PlayerId[];
+  /** Assist level of each human player, when it differs from `assist`. */
+  assistBy?: Partial<Record<PlayerId, number>>;
+  /** One against one: players 1 and 3 stay off the court. */
+  singles?: boolean;
   match?: Partial<MatchConfig>;
   seed?: number;
 }
@@ -71,7 +77,11 @@ export class Simulation {
   rallyHits = 0;
 
   private phaseT = 0;
-  private pendingHumanShot: ShotIntent | null = null;
+  private pendingShots: Array<ShotIntent | null> = [null, null, null, null];
+  /** Players on court: all four in doubles, one per side in singles. */
+  active: Player[] = [];
+  readonly singles: boolean;
+  private matchConfig: Partial<MatchConfig>;
   private pendingServe: ShotIntent | null = null;
   private serveContactT = 0;
   private aiServeAt = 0;
@@ -85,9 +95,14 @@ export class Simulation {
     this.config = config;
     this.random = mulberry(config.seed ?? (Math.random() * 2 ** 32) >>> 0);
     this.world.random = this.random;
-    this.match = new Match(config.match, 0);
+    this.singles = !!config.singles;
+    this.matchConfig = { ...config.match, singles: this.singles };
+    this.match = new Match(this.matchConfig, 0);
     this.ai = new Ai(this);
-    this.players[0].isHuman = config.humanControlled;
+    const humans = config.humans ?? (config.humanControlled ? [0 as PlayerId] : []);
+    for (const id of humans) this.players[id].isHuman = true;
+    this.active = this.singles ? [this.players[0], this.players[2]] : [...this.players];
+    for (const q of this.players) q.active = this.active.includes(q);
     this.applyLevels();
     this.layoutIdle();
   }
@@ -101,7 +116,7 @@ export class Simulation {
   }
 
   private applyLevels(): void {
-    for (const p of this.players) p.maxSpeed = p.isHuman ? HUMAN_SPEED : this.levelOf(p).maxSpeed;
+    for (const p of this.active) p.maxSpeed = p.isHuman ? HUMAN_SPEED : this.levelOf(p).maxSpeed;
   }
 
   private layoutIdle(): void {
@@ -111,7 +126,7 @@ export class Simulation {
 
   startMatch(firstServer?: PlayerId): void {
     const server = firstServer ?? ((this.random() < 0.5 ? 0 : 2) as PlayerId);
-    this.match = new Match(this.config.match, server);
+    this.match = new Match(this.matchConfig, server);
     this.now = 0;
     this.events.length = 0;
     this.applyLevels();
@@ -123,7 +138,7 @@ export class Simulation {
   }
 
   teamPlayers(team: Team): Player[] {
-    return this.players.filter((p) => p.team === team);
+    return this.active.filter((p) => p.team === team);
   }
 
   private setPhase(phase: SimPhase): void {
@@ -138,7 +153,15 @@ export class Simulation {
     const server = this.players[ref.server];
     const sx = serverXSign(server.team, ref.serveSide);
     const out: Array<{ x: number; z: number }> = [];
-    for (const p of this.players) {
+    if (this.singles) {
+      // One player per side: the server in the serving half, the receiver in the diagonal box.
+      for (const p of this.active) {
+        p.zone = p.homeSign;
+        out[p.id] = p === server ? { x: sx * 2.1, z: p.sideSign * 7.75 } : { x: -sx * 2.5, z: p.sideSign * 8.5 };
+      }
+      return out;
+    }
+    for (const p of this.active) {
       if (p.team === server.team) {
         if (p === server) {
           p.zone = sx;
@@ -159,7 +182,7 @@ export class Simulation {
 
   private beginPoint(): void {
     const spots = this.servePositions();
-    for (const p of this.players) {
+    for (const p of this.active) {
       p.moveTo = spots[p.id];
       p.swing = null;
       p.mood = 'play';
@@ -173,7 +196,7 @@ export class Simulation {
     this.hitterId = null;
     this.plans = [null, null, null, null];
     this.prediction = null;
-    this.pendingHumanShot = null;
+    this.pendingShots = [null, null, null, null];
     this.pendingServe = null;
     this.ballHeld = true;
     this.setPhase('positioning');
@@ -182,17 +205,31 @@ export class Simulation {
   // ---------------------------------------------------------------------------------------------
   // Input from the human player
 
-  setHumanMove(x: number, z: number): void {
-    const p = this.players[0];
+  /** Movement request for a human player, in world axes. */
+  setMove(id: PlayerId, x: number, z: number): void {
+    const p = this.players[id];
     if (!p.isHuman) return;
     p.wishX = x;
     p.wishZ = z;
   }
 
-  /** The human asked for a shot (swipe or button). */
+  /** A human player asked for a shot (swipe or button). */
+  shot(id: PlayerId, intent: ShotIntent): void {
+    if (!this.players[id].isHuman) return;
+    this.pendingShots[id] = intent;
+  }
+
+  setHumanMove(x: number, z: number): void {
+    this.setMove(0, x, z);
+  }
+
   humanShot(intent: ShotIntent): void {
-    if (!this.players[0].isHuman) return;
-    this.pendingHumanShot = intent;
+    this.shot(0, intent);
+  }
+
+  /** Aim and placement help for a human player. */
+  assistOf(p: Player): number {
+    return this.config.assistBy?.[p.id] ?? this.config.assist;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -208,9 +245,9 @@ export class Simulation {
         return;
       case 'positioning': {
         this.holdBallAt(this.server);
-        const settled = this.players.every((p) => !p.moveTo || p.distanceTo(p.moveTo.x, p.moveTo.z) < 0.15);
+        const settled = this.active.every((p) => !p.moveTo || p.distanceTo(p.moveTo.x, p.moveTo.z) < 0.15);
         if ((settled && this.phaseT > 0.5) || this.phaseT > 3.5) {
-          for (const p of this.players) {
+          for (const p of this.active) {
             if (p.moveTo && this.phaseT > 3.5) p.place(p.moveTo.x, p.moveTo.z);
           }
           this.enterServeReady();
@@ -221,9 +258,10 @@ export class Simulation {
         this.holdBallAt(this.server);
         const server = this.server;
         if (server.isHuman) {
-          if (this.pendingHumanShot) {
-            this.startServe(this.pendingHumanShot);
-            this.pendingHumanShot = null;
+          const asked = this.pendingShots[server.id];
+          if (asked) {
+            this.startServe(asked);
+            this.pendingShots[server.id] = null;
           }
         } else if (this.now >= this.aiServeAt) {
           this.startServe(this.ai.serveIntent(server));
@@ -263,7 +301,7 @@ export class Simulation {
     }
 
     this.updateHumanAssist();
-    for (const p of this.players) p.update(dt, this.now);
+    for (const p of this.active) p.update(dt, this.now);
     this.separatePartners();
     this.finishSwings();
   }
@@ -275,14 +313,14 @@ export class Simulation {
   private enterServeReady(): void {
     const server = this.server;
     // Server and receivers stand still for the serve; a human receiver may still adjust.
-    for (const p of this.players) {
+    for (const p of this.active) {
       if (!p.isHuman || p === server) p.moveTo = null;
       else p.moveTo = null;
       p.wishX = p.isHuman ? p.wishX : 0;
       p.wishZ = p.isHuman ? p.wishZ : 0;
     }
     this.ballHeld = true;
-    this.pendingHumanShot = null;
+    this.pendingShots = [null, null, null, null];
     this.aiServeAt = this.now + 0.9 + this.random() * 0.5;
     this.setPhase('serve_ready');
     this.events.push({ kind: 'serve_ready', server: server.id, serveNumber: this.match.referee.serveNumber });
@@ -291,7 +329,7 @@ export class Simulation {
   /** Hand in which the server holds the ball before dropping it. */
   private holdBallAt(p: Player): void {
     this.ballHeld = true;
-    for (const q of this.players) q.holdingBall = q === p;
+    for (const q of this.active) q.holdingBall = q === p;
     this.world.setBall({
       px: p.x + p.rightX * SERVE_DROP_X,
       py: 1.02,
@@ -359,9 +397,12 @@ export class Simulation {
 
   private updateRally(): void {
     // Human swing request.
-    if (this.pendingHumanShot) {
-      this.tryHumanSwing(this.pendingHumanShot);
-      this.pendingHumanShot = null;
+    for (const p of this.active) {
+      const asked = this.pendingShots[p.id];
+      if (asked) {
+        this.tryHumanSwing(p, asked);
+        this.pendingShots[p.id] = null;
+      }
     }
     if (this.now >= this.replanAt) {
       this.assignHitter();
@@ -428,7 +469,7 @@ export class Simulation {
       set: ev.score.some((s) => s.kind === 'set'),
       match: ev.score.some((s) => s.kind === 'match'),
     });
-    for (const p of this.players) p.mood = p.team === ev.winner ? 'celebrate' : 'dejected';
+    for (const p of this.active) p.mood = p.team === ev.winner ? 'celebrate' : 'dejected';
     this.endRally();
     this.setPhase('point_over');
     return true;
@@ -437,7 +478,7 @@ export class Simulation {
   private endRally(): void {
     this.hitterId = null;
     this.plans = [null, null, null, null];
-    for (const p of this.players) {
+    for (const p of this.active) {
       p.moveTo = null;
       p.prep = null;
       if (!p.isHuman) {
@@ -465,7 +506,7 @@ export class Simulation {
     const receiving = otherTeam(ref.lastHitTeam);
     let bestP: Player | null = null;
     let bestScore = -Infinity;
-    for (const p of this.players) {
+    for (const p of this.active) {
       if (p.team !== receiving) {
         this.plans[p.id] = null;
         continue;
@@ -491,7 +532,7 @@ export class Simulation {
     }
     this.hitterId = bestP ? bestP.id : null;
     // The player about to hit takes the racket back early, as the ball approaches.
-    for (const p of this.players) p.prep = null;
+    for (const p of this.active) p.prep = null;
     const plan = bestP ? this.plans[bestP.id] : null;
     if (bestP && plan && (bestP.isHuman || !this.leaveBall)) {
       const stroke: StrokeKind = plan.overhead
@@ -507,8 +548,7 @@ export class Simulation {
     }
   }
 
-  private tryHumanSwing(intent: ShotIntent): void {
-    const p = this.players[0];
+  private tryHumanSwing(p: Player, intent: ShotIntent): void {
     if (p.swing && this.now < p.swing.endT - 0.12) return;
     const ref = this.match.referee;
     let ic: Intercept | null = null;
@@ -557,7 +597,7 @@ export class Simulation {
   }
 
   private resolveSwings(): void {
-    for (const p of this.players) {
+    for (const p of this.active) {
       const s = p.swing;
       if (!s || s.resolved || this.now < s.contactT) continue;
       s.resolved = true;
@@ -581,7 +621,7 @@ export class Simulation {
   }
 
   private finishSwings(): void {
-    for (const p of this.players) {
+    for (const p of this.active) {
       if (p.swing && this.now >= p.swing.endT) p.swing = null;
     }
   }
@@ -611,7 +651,7 @@ export class Simulation {
     this.stillT = 0;
     this.rallyHits++;
     this.leaveBall = false;
-    for (const q of this.players) {
+    for (const q of this.active) {
       q.prep = null;
       if (q.team !== p.team) q.splitT = this.now;
     }
@@ -634,7 +674,7 @@ export class Simulation {
     const intent = swing.intent;
     const pw = Math.max(0, Math.min(1, intent.power));
     // The AI's targets are already chosen inside the court; its misses come from its own aim error.
-    const assist = p.isHuman ? this.config.assist : 0;
+    const assist = p.isHuman ? this.assistOf(p) : 0;
     const fwd = p.dir; // z direction of the opponents' half
     let depth: number; // landing distance beyond the net
     let speed: number;
@@ -750,22 +790,24 @@ export class Simulation {
 
   /** Light placement help: with the stick released, the human drifts towards the ball. */
   private updateHumanAssist(): void {
-    const p = this.players[0];
-    if (!p.isHuman) return;
     if (this.phase === 'positioning') return; // walking to the serve position
-    const stick = Math.hypot(p.wishX, p.wishZ);
-    const plan = this.plans[0];
-    const a = this.config.assist;
-    if (this.phase === 'rally' && stick < 0.15 && a > 0.02 && plan && this.hitterId === 0 && !(p.swing && !p.swing.resolved)) {
-      p.moveTo = plan.stance;
-      p.maxSpeed = HUMAN_SPEED * (0.2 + 0.75 * a);
-    } else {
-      p.moveTo = null;
-      p.maxSpeed = HUMAN_SPEED;
+    for (const p of this.active) {
+      if (!p.isHuman) continue;
+      const stick = Math.hypot(p.wishX, p.wishZ);
+      const plan = this.plans[p.id];
+      const a = this.assistOf(p);
+      if (this.phase === 'rally' && stick < 0.15 && a > 0.02 && plan && this.hitterId === p.id && !(p.swing && !p.swing.resolved)) {
+        p.moveTo = plan.stance;
+        p.maxSpeed = HUMAN_SPEED * (0.2 + 0.75 * a);
+      } else {
+        p.moveTo = null;
+        p.maxSpeed = HUMAN_SPEED;
+      }
     }
   }
 
   private separatePartners(): void {
+    if (this.singles) return;
     for (const t of [0, 1] as const) {
       const [a, b] = this.teamPlayers(t);
       const dx = b.x - a.x;

@@ -36,6 +36,8 @@ export class Player {
   swing: Swing | null = null;
   mood: Mood = 'play';
   isHuman = false;
+  /** False for the two players left out of a one-against-one match. */
+  active = true;
   /** Server holding the ball out before dropping it. */
   holdingBall = false;
   /** Shot this player is getting ready for: the racket goes back before the swing is asked for. */

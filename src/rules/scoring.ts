@@ -9,6 +9,8 @@ export interface MatchConfig {
   tiebreakPoints: number;
   /** "Punto de oro": at 40-40 the next point wins the game. */
   goldenPoint: boolean;
+  /** One against one: the two players serve alternate games. */
+  singles?: boolean;
 }
 
 export const DEFAULT_CONFIG: MatchConfig = {
@@ -20,6 +22,7 @@ export const DEFAULT_CONFIG: MatchConfig = {
 
 /** Serving order across games: A1, B1, A2, B2. */
 export const SERVE_ORDER: readonly PlayerId[] = [0, 2, 1, 3];
+const SINGLES_ORDER: readonly PlayerId[] = [0, 2, 0, 2];
 
 export interface ScoreSnapshot {
   points: [number, number];
@@ -50,19 +53,35 @@ export class Scoring {
   matchWinner: Team | null = null;
   /** Index into SERVE_ORDER of the player serving the current game (or who started the tie-break). */
   private serveIndex = 0;
+  /** Server dictated by the host when this score mirrors a remote match. */
+  private remoteServer: PlayerId | null = null;
+  private order: readonly PlayerId[] = SERVE_ORDER;
 
   constructor(config: Partial<MatchConfig> = {}, firstServer: PlayerId = 0) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.serveIndex = Math.max(0, SERVE_ORDER.indexOf(firstServer));
+    this.order = this.config.singles ? SINGLES_ORDER : SERVE_ORDER;
+    this.serveIndex = Math.max(0, this.order.indexOf(firstServer));
     // A match configured with a tie-break at 0-0 is a single tie-break.
     if (this.config.tiebreakAt === 0) this.tiebreak = true;
   }
 
+  /** Overwrites the score with a snapshot received from the host of an online match. */
+  restore(s: ScoreSnapshot): void {
+    this.points = [...s.points];
+    this.games = [...s.games];
+    this.sets = [...s.sets];
+    this.completedSets = s.completedSets.map((x) => [...x] as [number, number]);
+    this.tiebreak = s.tiebreak;
+    this.matchWinner = s.matchWinner;
+    this.remoteServer = s.server;
+  }
+
   get server(): PlayerId {
-    if (!this.tiebreak) return SERVE_ORDER[this.serveIndex % 4];
+    if (this.remoteServer !== null) return this.remoteServer;
+    if (!this.tiebreak) return this.order[this.serveIndex % 4];
     // Tie-break: the first player serves one point, then each player serves two.
     const n = this.points[0] + this.points[1];
-    return SERVE_ORDER[(this.serveIndex + Math.floor((n + 1) / 2)) % 4];
+    return this.order[(this.serveIndex + Math.floor((n + 1) / 2)) % 4];
   }
 
   get servingTeam(): Team {
