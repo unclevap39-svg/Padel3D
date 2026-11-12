@@ -258,6 +258,9 @@ export class Simulation {
         this.holdBallAt(this.server);
         const server = this.server;
         if (server.isHuman) {
+          // The server stands still: before a serve the stick only aims.
+          server.wishX = 0;
+          server.wishZ = 0;
           const asked = this.pendingShots[server.id];
           if (asked) {
             this.startServe(asked);

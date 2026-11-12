@@ -2,28 +2,29 @@ import type { ShotIntent, ShotType } from '../core/types';
 
 interface Gesture {
   id: number;
-  kind: 'stick' | 'swipe' | ShotType;
+  kind: 'stick' | 'button';
   x0: number;
   y0: number;
-  x: number;
-  y: number;
 }
 
-const TAP = 14;
+/** Shot played by each button: fixed pace, aimed with the joystick. */
+const SHOT_POWER: Record<ShotType, number> = { drive: 0.62, lob: 0.7, smash: 0.92 };
+/** Full sideways stick aims this far from straight ahead (radians). */
+const AIM_ANGLE = 0.62;
 
 /**
- * Touch controls: a floating joystick on the left half of the screen, swipes on the right half
- * (direction of the swipe = direction of the shot, length = power) and two buttons, lob and
- * smash, which also accept a drag to aim. Keyboard and mouse work too, for desktop testing.
+ * Touch controls: a floating joystick on the left of the screen to move, and three buttons on
+ * the right to hit — FRAPPE, LOB and SMASH. The ball goes where the joystick points at the
+ * moment the button is pressed (straight ahead when it is released). Keyboard works too.
  */
 export class TouchControls {
   /** Movement request: x right, z towards the camera, each -1..1. */
   readonly move = { x: 0, z: 0 };
   onShot: (intent: ShotIntent) => void = () => {};
-  private root: HTMLElement;
+  /** DOM root (exposed for tests and tooling). */
+  readonly root: HTMLElement;
   private base: HTMLElement;
   private knob: HTMLElement;
-  private trail: HTMLElement;
   private gestures = new Map<number, Gesture>();
   private keys = new Set<string>();
   private enabled = false;
@@ -33,20 +34,18 @@ export class TouchControls {
     this.root.className = 'controls hidden';
     this.root.innerHTML = `
       <div class="stick-base"><div class="stick-knob"></div></div>
-      <div class="swipe-trail"></div>
-      <div class="stick-hint">Déplacer</div>
-      <div class="swipe-hint">Glisser pour frapper</div>
+      <div class="stick-hint">Déplacer et viser</div>
       <button class="shot-btn lob" data-shot="lob">LOB</button>
-      <button class="shot-btn smash" data-shot="smash">SMASH</button>`;
+      <button class="shot-btn smash" data-shot="smash">SMASH</button>
+      <button class="shot-btn drive" data-shot="drive">FRAPPE</button>`;
     parent.appendChild(this.root);
     this.base = this.root.querySelector('.stick-base')!;
     this.knob = this.root.querySelector('.stick-knob')!;
-    this.trail = this.root.querySelector('.swipe-trail')!;
 
     this.root.addEventListener('pointerdown', (e) => this.down(e));
     this.root.addEventListener('pointermove', (e) => this.moveEvent(e));
     this.root.addEventListener('pointerup', (e) => this.up(e));
-    this.root.addEventListener('pointercancel', (e) => this.up(e, true));
+    this.root.addEventListener('pointercancel', (e) => this.up(e));
     this.root.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('keydown', (e) => this.key(e, true));
     window.addEventListener('keyup', (e) => this.key(e, false));
@@ -60,11 +59,11 @@ export class TouchControls {
       this.move.x = 0;
       this.move.z = 0;
       this.base.classList.remove('active');
-      this.trail.style.opacity = '0';
+      this.root.querySelectorAll('.shot-btn.pressed').forEach((b) => b.classList.remove('pressed'));
     }
   }
 
-  /** Fade the first-time hints once the player has used the controls. */
+  /** Fade the first-time hint once the player has used the controls. */
   private dismissHints(): void {
     this.root.classList.add('used');
   }
@@ -74,58 +73,45 @@ export class TouchControls {
     e.preventDefault();
     const target = e.target as HTMLElement;
     const shot = target.dataset?.shot as ShotType | undefined;
-    let kind: Gesture['kind'];
-    if (shot) kind = shot;
-    else if (e.clientX < window.innerWidth * 0.45) {
-      if ([...this.gestures.values()].some((g) => g.kind === 'stick')) return;
-      kind = 'stick';
-    } else kind = 'swipe';
-    const g: Gesture = { id: e.pointerId, kind, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY };
-    this.gestures.set(e.pointerId, g);
+    if (shot) {
+      // Buttons act on press, not release: timing a shot must feel immediate.
+      this.gestures.set(e.pointerId, { id: e.pointerId, kind: 'button', x0: e.clientX, y0: e.clientY });
+      target.classList.add('pressed');
+      this.dismissHints();
+      this.onShot({ type: shot, power: SHOT_POWER[shot], angle: this.move.x * AIM_ANGLE });
+      return;
+    }
+    // Anywhere else on the left two thirds of the screen: the joystick appears under the thumb.
+    if (e.clientX > window.innerWidth * 0.66) return;
+    if ([...this.gestures.values()].some((g) => g.kind === 'stick')) return;
+    this.gestures.set(e.pointerId, { id: e.pointerId, kind: 'stick', x0: e.clientX, y0: e.clientY });
     try {
       this.root.setPointerCapture(e.pointerId);
     } catch {
       // Synthetic events have no capturable pointer.
     }
-    if (kind === 'stick') {
-      this.base.style.left = `${g.x0}px`;
-      this.base.style.top = `${g.y0}px`;
-      this.base.classList.add('active');
-      this.knob.style.transform = 'translate(-50%, -50%)';
-    } else if (shot) {
-      target.classList.add('pressed');
-    }
+    this.base.style.left = `${e.clientX}px`;
+    this.base.style.top = `${e.clientY}px`;
+    this.base.classList.add('active');
+    this.knob.style.transform = 'translate(-50%, -50%)';
   }
 
   private moveEvent(e: PointerEvent): void {
     const g = this.gestures.get(e.pointerId);
-    if (!g) return;
-    g.x = e.clientX;
-    g.y = e.clientY;
-    const dx = g.x - g.x0;
-    const dy = g.y - g.y0;
-    if (g.kind === 'stick') {
-      const R = 52;
-      const len = Math.hypot(dx, dy);
-      const k = len > R ? R / len : 1;
-      this.knob.style.transform = `translate(calc(-50% + ${dx * k}px), calc(-50% + ${dy * k}px))`;
-      // Small dead zone, then full speed quickly: easier on a phone than a linear stick.
-      const m = Math.min(1, Math.max(0, (len - 6) / (R - 14)));
-      this.move.x = len > 0 ? (dx / len) * m : 0;
-      this.move.z = len > 0 ? (dy / len) * m : 0;
-    } else {
-      const len = Math.hypot(dx, dy);
-      if (len > TAP) {
-        this.trail.style.opacity = '1';
-        this.trail.style.left = `${g.x0}px`;
-        this.trail.style.top = `${g.y0}px`;
-        this.trail.style.width = `${len}px`;
-        this.trail.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
-      }
-    }
+    if (!g || g.kind !== 'stick') return;
+    const dx = e.clientX - g.x0;
+    const dy = e.clientY - g.y0;
+    const R = 52;
+    const len = Math.hypot(dx, dy);
+    const k = len > R ? R / len : 1;
+    this.knob.style.transform = `translate(calc(-50% + ${dx * k}px), calc(-50% + ${dy * k}px))`;
+    // Small dead zone, then full speed quickly: easier on a phone than a linear stick.
+    const m = Math.min(1, Math.max(0, (len - 6) / (R - 14)));
+    this.move.x = len > 0 ? (dx / len) * m : 0;
+    this.move.z = len > 0 ? (dy / len) * m : 0;
   }
 
-  private up(e: PointerEvent, cancelled = false): void {
+  private up(e: PointerEvent): void {
     const g = this.gestures.get(e.pointerId);
     if (!g) return;
     this.gestures.delete(e.pointerId);
@@ -136,23 +122,9 @@ export class TouchControls {
       this.dismissHints();
       return;
     }
-    this.trail.style.opacity = '0';
-    this.root.querySelectorAll('.shot-btn.pressed').forEach((b) => b.classList.remove('pressed'));
-    if (cancelled) return;
-    const dx = g.x - g.x0;
-    const dy = g.y - g.y0;
-    const len = Math.hypot(dx, dy);
-    const type: ShotType = g.kind === 'swipe' ? 'drive' : (g.kind as ShotType);
-    const ref = Math.min(window.innerHeight, 440) * 0.5;
-    let angle = 0;
-    let power = g.kind === 'swipe' ? 0.5 : 0.7;
-    if (len > TAP) {
-      // Up the screen is straight ahead; a downward swipe still aims by its sideways part.
-      angle = Math.atan2(dx, Math.abs(dy) + 1e-3);
-      power = Math.max(0.12, Math.min(1, len / ref));
+    if (![...this.gestures.values()].some((x) => x.kind === 'button')) {
+      this.root.querySelectorAll('.shot-btn.pressed').forEach((b) => b.classList.remove('pressed'));
     }
-    this.dismissHints();
-    this.onShot({ type, power, angle });
   }
 
   private key(e: KeyboardEvent, down: boolean): void {
@@ -164,10 +136,10 @@ export class TouchControls {
     this.move.x = (has('arrowright', 'd') ? 1 : 0) - (has('arrowleft', 'a', 'q') ? 1 : 0);
     this.move.z = (has('arrowdown', 's') ? 1 : 0) - (has('arrowup', 'w', 'z') ? 1 : 0);
     if (down && !e.repeat) {
-      const angle = (has('arrowright', 'd') ? 0.5 : 0) - (has('arrowleft', 'a', 'q') ? 0.5 : 0);
-      if (k === ' ' || k === 'j') this.onShot({ type: 'drive', power: e.shiftKey ? 0.9 : 0.55, angle });
-      else if (k === 'k') this.onShot({ type: 'lob', power: 0.7, angle });
-      else if (k === 'l') this.onShot({ type: 'smash', power: 0.9, angle });
+      const angle = this.move.x * AIM_ANGLE;
+      if (k === ' ' || k === 'j') this.onShot({ type: 'drive', power: SHOT_POWER.drive, angle });
+      else if (k === 'k') this.onShot({ type: 'lob', power: SHOT_POWER.lob, angle });
+      else if (k === 'l') this.onShot({ type: 'smash', power: SHOT_POWER.smash, angle });
     }
   }
 }

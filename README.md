@@ -58,9 +58,9 @@ l'écran d'installation.
 | Action | Geste |
 |---|---|
 | Se déplacer | Pouce gauche : posez-le n'importe où sur la moitié gauche et glissez |
-| Frapper | Pouce droit : glissez. Direction du geste = direction de la balle, longueur = puissance |
-| Lob / Smash | Boutons à droite (appui, ou appui puis glissé pour viser) |
-| Servir | Glissez vers le carré de service en diagonale (deux essais) |
+| Frapper | Trois boutons à droite : FRAPPE (coup normal), LOB, SMASH (balle haute) |
+| Viser | La balle part du côté où pointe le joystick au moment de l'appui ; relâché, droit devant |
+| Servir | Bouton FRAPPE : la balle vise le carré en diagonale (deux essais) |
 | Clavier (ordinateur) | Flèches ou ZQSD, Espace frapper, K lob, L smash |
 
 L'aide au placement se règle de 0 à 100 % dans les réglages : elle ramène la balle dans le
@@ -122,7 +122,7 @@ src/
   ai/        Interception de la balle, placement en double, choix de coups, 3 niveaux
   entities/  Joueur (logique), animation procédurale, modèle skinné, mannequin de secours, balle
   render/    Scène, terrain, textures procédurales, caméra, qualité adaptative
-  input/     Joystick, geste de frappe, boutons, clavier, vibration
+  input/     Joystick, boutons de frappe, clavier, vibration
   audio/     Sons synthétisés (Web Audio) et annonce vocale du score
   net/       Jeu en ligne : salon, connexion directe, hôte et invité
   ui/        Accueil (modes, en ligne, boutique, vestiaire, profil, réglages), HUD, menus

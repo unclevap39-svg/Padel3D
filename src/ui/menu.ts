@@ -132,10 +132,10 @@ export class Menu {
           <div class="panel">
             <h2>Comment jouer</h2>
             <ul class="help">
-              <li><b>Se déplacer</b> : posez le pouce gauche n'importe où à gauche et glissez.</li>
-              <li><b>Frapper</b> : glissez le pouce droit. La direction du geste donne la direction de la balle, sa longueur la puissance. Un simple appui joue un coup droit devant.</li>
-              <li><b>LOB</b> et <b>SMASH</b> : appuyez, ou appuyez puis glissez pour viser. Le smash ne part que sur une balle haute.</li>
-              <li><b>Service</b> : glissez vers le carré de service en diagonale. Deux essais.</li>
+              <li><b>Se déplacer</b> : posez le pouce gauche n'importe où à gauche et glissez : c'est le joystick.</li>
+              <li><b>Frapper</b> : trois boutons à droite. <b>FRAPPE</b> pour le coup normal, <b>LOB</b> pour passer au-dessus des adversaires, <b>SMASH</b> sur une balle haute.</li>
+              <li><b>Viser</b> : la balle part du côté où pointe le joystick au moment où vous appuyez ; joystick relâché, elle part droit devant.</li>
+              <li><b>Service</b> : appuyez sur FRAPPE. La balle vise le carré en diagonale ; le joystick permet de la décaler. Deux essais.</li>
               <li><b>Règles</b> : un seul rebond au sol ; la balle peut ensuite toucher les vitres. Votre balle doit rebondir au sol chez l'adversaire avant de toucher ses vitres ou son grillage.</li>
               <li>Clavier : flèches pour bouger, Espace frapper, K lob, L smash.</li>
             </ul>

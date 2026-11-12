@@ -170,6 +170,11 @@ export class Game {
     this.hud.onPause = () => this.pause();
     this.controls.onShot = (intent) => {
       this.sound.unlock();
+      const ref = this.sim.match.referee;
+      // Serving with the stick released: aim at the middle of the diagonal service box.
+      if (this.sim.phase === 'serve_ready' && ref.server === 0 && Math.abs(intent.angle ?? 0) < 0.05) {
+        intent = { ...intent, type: 'drive', angle: ref.serveSide === 'right' ? -0.38 : 0.38 };
+      }
       this.sim.humanShot(intent);
     };
 
@@ -621,7 +626,7 @@ export class Game {
           if (!live) break;
           this.hud.updateScore(this.sim.match.scoring, e.server);
           if (e.server === 0) {
-            this.hud.setPrompt(e.serveNumber === 2 ? 'Second service — glissez pour servir en diagonale' : 'Glissez pour servir en diagonale');
+            this.hud.setPrompt(e.serveNumber === 2 ? 'Second service — appuyez sur FRAPPE' : 'Appuyez sur FRAPPE pour servir');
           } else this.hud.setPrompt(null);
           break;
         case 'phase':
