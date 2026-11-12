@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { createBlobTexture } from '../render/textures';
-import { Animator, type Pose, RACKET_REACH } from './animator';
+import { Animator, type Pose, type Proportions, RACKET_REACH } from './animator';
 import type { Player } from './player';
 
 export interface Outfit {
+  /** Use the darker skin texture on the realistic model. */
+  darkSkin?: boolean;
   shirt: number;
   shorts: number;
   skin: number;
@@ -204,6 +206,7 @@ export function buildRacket(): THREE.Group {
 
 const _m = new THREE.Matrix4();
 const _x = new THREE.Vector3();
+const _g = new THREE.Vector3();
 
 /** One player on screen: body, racket and a soft contact shadow, driven by an Animator. */
 export class CharacterView {
@@ -253,11 +256,17 @@ export class CharacterView {
     }
   }
 
-  /** Swap the mannequin for a loaded model. */
-  setBody(body: BodyRenderer): void {
+  /** Swap the mannequin for a loaded model, adopting its body measurements. */
+  setBody(body: BodyRenderer, proportions?: Proportions): void {
     this.group.remove(this.body.object);
     this.body = body;
     this.group.add(body.object);
+    if (proportions) this.animator.prop = proportions;
+  }
+
+  /** From the wrist to the middle of the closed hand, along the forearm. */
+  private gripOffset(pose: Pose): THREE.Vector3 {
+    return _g.subVectors(pose.wrist[1], pose.elbow[1]).normalize().multiplyScalar(0.075);
   }
 
   update(dt: number, player: Player, now: number, ball: { x: number; y: number; z: number }, ballLive: boolean): void {
@@ -272,7 +281,7 @@ export class CharacterView {
     _x.crossVectors(pose.racketDir, pose.racketNormal).normalize();
     _m.makeBasis(_x, pose.racketDir, pose.racketNormal);
     this.racket.quaternion.setFromRotationMatrix(_m);
-    this.racket.position.copy(pose.wrist[1]).addScaledVector(pose.racketDir, 0.02);
+    this.racket.position.copy(pose.wrist[1]).addScaledVector(pose.racketDir, 0.02).add(this.gripOffset(pose));
     this.shadow.position.x = pose.hips.x;
     this.shadow.position.z = pose.hips.z;
   }

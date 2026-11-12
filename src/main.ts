@@ -46,7 +46,8 @@ async function boot(): Promise<void> {
       return choice.outcome === 'accepted';
     },
   });
-  progress(0.8, 'Joueurs…');
+  progress(0.6, 'Joueurs…');
+  await game.loadCharacters((f) => progress(0.6 + 0.3 * f, 'Joueurs…'));
   await nextFrame();
   game.frame(0.016); // compile shaders before revealing the scene
   progress(1, 'Prêt');

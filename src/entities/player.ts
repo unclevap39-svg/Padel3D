@@ -36,6 +36,8 @@ export class Player {
   swing: Swing | null = null;
   mood: Mood = 'play';
   isHuman = false;
+  /** Server holding the ball out before dropping it. */
+  holdingBall = false;
 
   constructor(id: PlayerId) {
     this.id = id;

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Sound } from '../audio/sound';
 import { BallView } from '../entities/ball';
 import { CharacterView, type Outfit } from '../entities/character';
+import { SkinnedBody, loadPlayerModel } from '../entities/skinned';
 import { TouchControls, vibrate } from '../input/touch';
 import { TICK_DT } from '../physics/world';
 import { AdaptiveQuality } from '../render/adaptive';
@@ -36,9 +37,9 @@ const FAULTS: Record<string, string> = {
 
 const OUTFITS: Outfit[] = [
   { shirt: 0xf3f5f7, shorts: 0x1b2740, skin: 0xd9a57e, hair: 0x2a1d14, shoes: 0xf2f2f2 },
-  { shirt: 0xf3f5f7, shorts: 0x1b2740, skin: 0xb9825c, hair: 0x15110e, shoes: 0xf2f2f2 },
+  { shirt: 0xf3f5f7, shorts: 0x1b2740, skin: 0xb9825c, hair: 0x15110e, shoes: 0xf2f2f2, darkSkin: true },
   { shirt: 0xd8362f, shorts: 0x15171c, skin: 0xe0b08c, hair: 0x4a3420, shoes: 0x202428 },
-  { shirt: 0xd8362f, shorts: 0x15171c, skin: 0x8f5f3f, hair: 0x100c0a, shoes: 0x202428 },
+  { shirt: 0xd8362f, shorts: 0x15171c, skin: 0x8f5f3f, hair: 0x100c0a, shoes: 0x202428, darkSkin: true },
 ];
 
 export interface GameOptions {
@@ -74,6 +75,10 @@ export class Game {
   private pendingAnnounce: { at: number; text: string } | null = null;
   private opts: GameOptions;
   private ballPos = { x: 0, y: 1, z: 0 };
+  /** Development aid: fixed camera for close-up checks. */
+  /** Development aid: stop the simulation clock while still drawing the characters. */
+  freeze = false;
+  debugCam: { pos: [number, number, number]; look: [number, number, number]; fov?: number } | null = null;
 
   constructor(opts: GameOptions) {
     this.opts = opts;
@@ -120,6 +125,23 @@ export class Game {
       if (document.hidden && this.playing && !this.paused) this.pause();
     });
     window.addEventListener('pointerdown', () => this.sound.unlock(), { once: false, passive: true });
+  }
+
+  /**
+   * Loads the realistic player model and puts it on the four characters. If it cannot be
+   * loaded the jointed mannequins stay in place.
+   */
+  async loadCharacters(onProgress?: (fraction: number) => void): Promise<boolean> {
+    try {
+      const model = await loadPlayerModel(onProgress);
+      this.characters.forEach((c, i) => {
+        c.setBody(new SkinnedBody(model, OUTFITS[i], !!OUTFITS[i].darkSkin), model.proportions);
+      });
+      return true;
+    } catch (err) {
+      console.warn('Modèle de joueur indisponible, mannequins conservés', err);
+      return false;
+    }
   }
 
   private initialTier(): QualityTier {
@@ -240,6 +262,7 @@ export class Game {
       this.sim.setHumanMove(this.controls.move.x, this.controls.move.z);
       this.acc += simDt;
       let steps = 0;
+      if (this.freeze) this.acc = 0;
       while (this.acc >= TICK_DT && steps < 12) {
         this.sim.tick();
         this.acc -= TICK_DT;
@@ -258,6 +281,15 @@ export class Game {
       }
       this.ball.update(b, this.sim.world.ballRotation(), this.stage.camera);
       this.camera.update(this.stage.camera, dt, this.sim.players[0], this.ballPos);
+      if (this.debugCam) {
+        const cam = this.stage.camera;
+        cam.position.set(...this.debugCam.pos);
+        cam.lookAt(...this.debugCam.look);
+        if (this.debugCam.fov) {
+          cam.fov = this.debugCam.fov;
+          cam.updateProjectionMatrix();
+        }
+      }
 
       if (this.pendingAnnounce && this.clock >= this.pendingAnnounce.at) {
         this.sound.say(this.pendingAnnounce.text);

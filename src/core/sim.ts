@@ -24,6 +24,9 @@ export const SWING_LEAD = 0.26;
 const SWING_RECOVERY = 0.42;
 /** Serve: ball dropped at this time before the racket meets it after its bounce. */
 const SERVE_DROP_TIME = 0.63;
+/** Where the server holds and drops the ball, relative to the body: racket side, in front. */
+const SERVE_DROP_X = 0.36;
+const SERVE_DROP_Z = 0.42;
 
 function mulberry(seed: number): () => number {
   let s = seed >>> 0;
@@ -288,10 +291,11 @@ export class Simulation {
   /** Hand in which the server holds the ball before dropping it. */
   private holdBallAt(p: Player): void {
     this.ballHeld = true;
+    for (const q of this.players) q.holdingBall = q === p;
     this.world.setBall({
-      px: p.x - p.rightX * 0.22,
+      px: p.x + p.rightX * SERVE_DROP_X,
       py: 1.02,
-      pz: p.z + p.dir * 0.3,
+      pz: p.z + p.dir * SERVE_DROP_Z,
       vx: 0,
       vy: 0,
       vz: 0,
@@ -306,10 +310,11 @@ export class Simulation {
     this.pendingServe = intent;
     this.ballHeld = false;
     // Drop the ball in front of the racket side; it bounces once and is struck below the waist.
+    p.holdingBall = false;
     this.world.setBall({
-      px: p.x + p.rightX * 0.38,
+      px: p.x + p.rightX * SERVE_DROP_X,
       py: 1.0,
-      pz: p.z + p.dir * 0.42,
+      pz: p.z + p.dir * SERVE_DROP_Z,
       vx: 0,
       vy: -1.0,
       vz: 0,
@@ -324,7 +329,7 @@ export class Simulation {
       startT: this.now,
       contactT: this.serveContactT,
       endT: this.serveContactT + SWING_RECOVERY,
-      contact: { x: p.x + p.rightX * 0.38, y: 0.55, z: p.z + p.dir * 0.42 },
+      contact: { x: p.x + p.rightX * SERVE_DROP_X, y: 0.55, z: p.z + p.dir * SERVE_DROP_Z },
       willHit: true,
       resolved: false,
     };
@@ -697,6 +702,10 @@ export class Simulation {
       tx += this.gauss() * sigma;
       tz += this.gauss() * sigma * 1.2;
     }
+
+    // Height error: now and then a shot is hit too low and catches the net.
+    const heightError = p.isHuman ? (0.75 - 0.5 * assist) * 0.16 : this.levelOf(p).aimError * 0.2;
+    clearance += this.gauss() * heightError;
 
     return {
       from,

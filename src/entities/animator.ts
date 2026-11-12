@@ -201,7 +201,8 @@ interface Foot {
  */
 export class Animator {
   readonly pose = new Pose();
-  readonly prop: Proportions;
+  /** Body measurements; replaced when a model with its own skeleton is attached. */
+  prop: Proportions;
   worldX = 0;
   worldZ = 0;
   /** Facing angle: 0 looks along +z. */
@@ -538,12 +539,17 @@ export class Animator {
       if (def.overhead && now < swing.contactT) {
         leftTarget.set(0.22, 1.95, 0.28);
       } else if (swing.stroke === 'serve' && now < swing.contactT && u < 0.35) {
-        leftTarget.set(-0.3, 1.0, 0.42);
+        leftTarget.set(-0.33, 0.95, 0.36);
       } else if (swing.stroke === 'backhand' || swing.stroke === 'volley_bh') {
         leftTarget.set(0.42, 1.0, -0.2);
       } else {
         leftTarget.set(0.4, 1.12, 0.22);
       }
+    }
+    if (player.holdingBall && !swing) {
+      // Ball held out in the palm, ready to be dropped for the serve.
+      leftTarget.set(-0.33, 0.95, 0.36);
+      leftFree = 1;
     }
     if (celebrating) {
       const pump = Math.sin(this.moodT * 9) * 0.08 * clamp01(2.2 - this.moodT * 0.7);
