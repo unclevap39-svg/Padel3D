@@ -14,8 +14,12 @@ export class CameraRig {
   focus = 0;
   /** Menu mode: slow orbit around the court. */
   orbit = false;
-  /** Home screen: close three-quarter view of the player's character, set to the right of frame. */
-  hero: { zoom: number } | null = null;
+  /**
+   * Home screen: close view of the player's character. `shift` places it across the frame:
+   * 0 in the middle, 1 at the right edge, -1 at the left edge.
+   */
+  hero: { zoom: number; shift?: number } | null = null;
+  private heroShift = 0;
   private orbitT = 0;
   private wantPos = new THREE.Vector3();
   private wantLook = new THREE.Vector3();
@@ -39,7 +43,8 @@ export class CameraRig {
       // Place the character about three quarters of the way across the screen, whatever its shape.
       const dist = 3.7 * k;
       const halfWidth = dist * Math.tan((camera.fov * Math.PI) / 360) * camera.aspect;
-      const lateral = 0.56 * halfWidth;
+      this.heroShift += ((this.hero.shift ?? 0.56) - this.heroShift) * Math.min(1, dt * 5);
+      const lateral = this.heroShift * halfWidth;
       this.wantPos.set(player.x + lateral + 0.3 + sway, 1.28, player.z - dist);
       this.wantLook.set(player.x + lateral, 1.0, player.z);
     } else if (this.orbit) {
