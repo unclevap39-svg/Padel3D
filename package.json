@@ -11,10 +11,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@dimforge/rapier3d-compat": "^0.21.0",
+    "@dimforge/rapier3d": "^0.21.0",
     "three": "^0.187.0"
   },
   "devDependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
@@ -24,6 +25,7 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vite-plugin-pwa": "^2.0.0",
+    "vite-plugin-wasm": "^3.6.0",
     "vitest": "^5.1.0"
   }
 }

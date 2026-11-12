@@ -65,7 +65,7 @@ export class Stage {
   /** Multiplier applied on top of the tier's pixel ratio by the adaptive controller (0.5..1). */
   resolutionScale = 1;
   /** Field of view for the current aspect ratio, before any zoom. */
-  baseFov = 38;
+  baseFov = 35;
 
   constructor(canvas: HTMLCanvasElement, tier: QualityTier) {
     this.tier = tier;
@@ -76,7 +76,7 @@ export class Stage {
     this.renderer.shadowMap.enabled = TIERS[tier].shadowSize > 0;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
-    this.camera = new THREE.PerspectiveCamera(38, 16 / 9, 0.1, 300);
+    this.camera = new THREE.PerspectiveCamera(35, 16 / 9, 0.1, 300);
     this.camera.position.set(0, 5.2, 16.5);
     this.camera.lookAt(0, 0.8, -2);
 
@@ -148,7 +148,7 @@ export class Stage {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     // Keep the whole court width in view on narrow (portrait-ish) screens.
-    this.baseFov = w / h > 1.5 ? 38 : Math.min(72, 38 * (1.5 / (w / h)));
+    this.baseFov = w / h > 1.5 ? 35 : Math.min(72, 35 * (1.5 / (w / h)));
     this.camera.fov = this.baseFov;
     this.camera.updateProjectionMatrix();
   }

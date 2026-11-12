@@ -15,7 +15,10 @@ export class BallView {
   private trail: THREE.Mesh;
   private trailPositions: Float32Array;
   private history: THREE.Vector3[] = [];
-  private static readonly TRAIL_POINTS = 10;
+  private v1 = new THREE.Vector3();
+  private v2 = new THREE.Vector3();
+  private v3 = new THREE.Vector3();
+  private static readonly TRAIL_POINTS = 7;
 
   constructor() {
     const tex = createBallTextures();
@@ -94,14 +97,14 @@ export class BallView {
 
     // Trail.
     const hist = this.history;
-    hist.unshift(new THREE.Vector3(b.px, b.py, b.pz));
-    if (hist.length > BallView.TRAIL_POINTS) hist.length = BallView.TRAIL_POINTS;
+    const recycled = hist.length >= BallView.TRAIL_POINTS ? hist.pop()! : new THREE.Vector3();
+    hist.unshift(recycled.set(b.px, b.py, b.pz));
     const speed = Math.hypot(b.vx, b.vy, b.vz);
     const mat = this.trail.material as THREE.ShaderMaterial;
-    mat.uniforms.uOpacity.value = Math.min(0.5, Math.max(0, (speed - 6) / 30));
-    const toCam = new THREE.Vector3();
-    const side = new THREE.Vector3();
-    const dir = new THREE.Vector3();
+    mat.uniforms.uOpacity.value = Math.min(0.35, Math.max(0, (speed - 8) / 40));
+    const toCam = this.v1;
+    const side = this.v2;
+    const dir = this.v3;
     const p = this.trailPositions;
     const r = BALL_RADIUS * BallView.VISUAL_SCALE * 0.8;
     for (let i = 0; i < BallView.TRAIL_POINTS; i++) {

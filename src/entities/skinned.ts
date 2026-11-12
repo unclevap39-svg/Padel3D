@@ -16,7 +16,8 @@ export interface PlayerModel {
 
 export async function loadPlayerModel(onProgress?: (fraction: number) => void): Promise<PlayerModel> {
   const draco = new DRACOLoader();
-  draco.setDecoderPath(`${import.meta.env.BASE_URL}draco/`);
+  const base = import.meta.env.BASE_URL;
+  draco.setDecoderPath({ js: `${base}draco/draco_wasm_wrapper.js`, wasm: `${base}draco/draco_decoder.wasm` });
   const loader = new GLTFLoader();
   loader.setDRACOLoader(draco);
   const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/player.glb`, (e) => {

@@ -1,4 +1,4 @@
-import RAPIER from '@dimforge/rapier3d-compat';
+import type RapierModule from '@dimforge/rapier3d';
 import { COURT } from '../rules/court';
 import {
   BALL_INERTIA,
@@ -34,9 +34,21 @@ export const TICK_DT = PHYSICS_DT * SUBSTEPS_PER_TICK;
 export const MAX_SPIN = 180;
 const WALL_T = 0.12;
 
+type Rapier = typeof RapierModule;
+let RAPIER: Rapier;
 let rapierReady: Promise<void> | null = null;
+
+/**
+ * Loads the physics engine. The WebAssembly binary is a separate file fetched here, so it is
+ * not inlined (and bloated) in the JavaScript bundle.
+ */
 export function initPhysics(): Promise<void> {
-  rapierReady ??= RAPIER.init();
+  rapierReady ??= import('@dimforge/rapier3d').then(async (mod) => {
+    const r = ((mod as { default?: Rapier }).default ?? mod) as Rapier & { init?: () => Promise<void> };
+    // The unit tests alias the package to its "compat" build, which needs an explicit init.
+    if (typeof r.init === 'function') await r.init();
+    RAPIER = r;
+  });
   return rapierReady;
 }
 
@@ -45,10 +57,10 @@ export function initPhysics(): Promise<void> {
  * body. Drag and the Magnus effect are applied as forces every step.
  */
 export class PhysicsWorld {
-  private world: RAPIER.World;
-  private events: RAPIER.EventQueue;
-  private ballBody: RAPIER.RigidBody;
-  private ballCollider: RAPIER.Collider;
+  private world: RapierModule.World;
+  private events: RapierModule.EventQueue;
+  private ballBody: RapierModule.RigidBody;
+  private ballCollider: RapierModule.Collider;
   private surfaces = new Map<number, ContactSurface>();
   private aero = { x: 0, y: 0, z: 0 };
   private state: BallState = { px: 0, py: 1, pz: 0, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0 };
