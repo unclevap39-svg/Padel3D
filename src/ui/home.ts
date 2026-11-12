@@ -214,11 +214,10 @@ export class Home {
     let extra = '';
     let difficulty: string;
     if (mode.id === 'tournament') {
-      const r = TOURNAMENT_ROUNDS[p.tournamentRound];
-      extra = `<div class="rounds">${TOURNAMENT_ROUNDS.map((x, i) => `<span class="${i < p.tournamentRound ? 'won' : i === p.tournamentRound ? 'cur' : ''}">${x.name}</span>`).join('')}</div>`;
-      difficulty = `<div class="fixed-diff">Prochain tour : <b>${r.name}</b> · ${DIFFS.find((d) => d[0] === r.difficulty)![1]}</div>`;
+      extra = `<div class="rounds">${TOURNAMENT_ROUNDS.map((x, i) => `<span class="${i < p.tournamentRound ? 'won' : i === p.tournamentRound ? 'cur' : ''}">${x.name.replace(' de finale', '')}</span>`).join('')}</div>`;
+      difficulty = '';
     } else if (mode.difficulty) {
-      difficulty = `<div class="fixed-diff">Difficulté imposée : <b>${DIFFS.find((d) => d[0] === mode.difficulty)![1]}</b></div>`;
+      difficulty = `<div class="fixed-diff">Difficulté : <b>${DIFFS.find((d) => d[0] === mode.difficulty)![1]}</b></div>`;
     } else {
       difficulty = `<div class="seg" role="group" aria-label="Difficulté">${DIFFS.map(
         ([d, label]) => `<button data-diff="${d}" class="${this.settings.difficulty === d ? 'on' : ''}">${label}</button>`,
@@ -229,19 +228,18 @@ export class Home {
     return `
       <div class="kicker">Modes de jeu</div>
       <div class="mode-grid">${cards}</div>
-      <div class="mode-detail">
-        <h2>${mode.name}</h2>
-        <p>${mode.detail}</p>
-        ${extra}
-        <div class="detail-row">
-          <div class="seg format" role="group" aria-label="Format">
-            <button data-format="double" class="${p.format === 'double' ? 'on' : ''}">Double 2v2</button>
-            <button data-format="single" class="${p.format === 'single' ? 'on' : ''}">Simple 1v1</button>
-          </div>
-          ${difficulty}<div class="reward">${reward}</div>
+      <p class="mode-desc">${mode.detail}</p>
+      <div class="detail-row">
+        <div class="seg format" role="group" aria-label="Format">
+          <button data-format="double" class="${p.format === 'double' ? 'on' : ''}">Double 2v2</button>
+          <button data-format="single" class="${p.format === 'single' ? 'on' : ''}">Simple 1v1</button>
         </div>
+        ${extra || difficulty}
       </div>
-      <button class="play-btn" data-act="play"><span>Jouer</span>${ICONS.play}</button>`;
+      <div class="play-row">
+        <button class="play-btn" data-act="play"><span>Jouer</span>${ICONS.play}</button>
+        <div class="reward">${reward}</div>
+      </div>`;
   }
 
   private renderOnline(): string {
