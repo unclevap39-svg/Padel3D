@@ -17,6 +17,8 @@ export interface Outfit {
 export interface BodyRenderer {
   readonly object: THREE.Object3D;
   update(pose: Pose): void;
+  /** Recolour shirt and shorts, when the body supports it. */
+  setColors?(shirt: number, shorts: number): void;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -148,16 +150,17 @@ export class Mannequin implements BodyRenderer {
   }
 }
 
-let racketFaceTexture: THREE.Texture | null = null;
-function racketFace(): THREE.Texture {
-  if (racketFaceTexture) return racketFaceTexture;
+const racketFaceTextures = new Map<number, THREE.Texture>();
+function racketFace(accent: number): THREE.Texture {
+  const cached = racketFaceTextures.get(accent);
+  if (cached) return cached;
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const ctx = c.getContext('2d')!;
   ctx.fillStyle = '#16181c';
   ctx.fillRect(0, 0, 256, 256);
   // Coloured arc and the drilled holes typical of a padel racket.
-  ctx.strokeStyle = '#d8ef2f';
+  ctx.strokeStyle = `#${accent.toString(16).padStart(6, '0')}`;
   ctx.lineWidth = 16;
   ctx.beginPath();
   ctx.arc(128, 128, 96, Math.PI * 1.05, Math.PI * 1.95);
@@ -173,16 +176,17 @@ function racketFace(): THREE.Texture {
         ctx.fill();
       }
     }
-  racketFaceTexture = new THREE.CanvasTexture(c);
-  racketFaceTexture.colorSpace = THREE.SRGBColorSpace;
-  return racketFaceTexture;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  racketFaceTextures.set(accent, tex);
+  return tex;
 }
 
 /** Padel racket: origin at the grip, +y along the handle, +z the face normal. */
-export function buildRacket(): THREE.Group {
+export function buildRacket(accent = 0xd8ef2f, frame = 0x14161a): THREE.Group {
   const g = new THREE.Group();
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.35, metalness: 0.2 });
-  const faceMat = new THREE.MeshStandardMaterial({ map: racketFace(), roughness: 0.5, metalness: 0.1 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: frame, roughness: 0.35, metalness: 0.2 });
+  const faceMat = new THREE.MeshStandardMaterial({ map: racketFace(accent), roughness: 0.5, metalness: 0.1 });
   const gripMat = new THREE.MeshStandardMaterial({ color: 0xe9e9e4, roughness: 0.9 });
   const headR = 0.122;
   const head = new THREE.Mesh(new THREE.CylinderGeometry(headR, headR, 0.036, 28, 1), [frameMat, faceMat, faceMat]);
@@ -216,8 +220,11 @@ export class CharacterView {
   private racket: THREE.Group;
   private shadow: THREE.Mesh;
   private marker: THREE.Mesh | null = null;
+  /** Current colours, re-applied when the body is swapped. */
+  outfit: Outfit;
 
   constructor(outfit: Outfit, highlight: boolean) {
+    this.outfit = outfit;
     this.animator = new Animator();
     this.body = new Mannequin(outfit);
     this.group.add(this.body.object);
@@ -253,6 +260,25 @@ export class CharacterView {
       this.marker.position.y = 0.008;
       this.marker.renderOrder = 2;
       this.group.add(this.marker);
+    }
+  }
+
+  /** Changes the racket's colours (shop items). */
+  setRacket(accent: number, frame: number): void {
+    this.group.remove(this.racket);
+    this.racket = buildRacket(accent, frame);
+    this.group.add(this.racket);
+  }
+
+  /** Changes shirt and shorts colours (shop items). */
+  setOutfit(outfit: Outfit): void {
+    this.outfit = outfit;
+    if (this.body instanceof Mannequin) {
+      this.group.remove(this.body.object);
+      this.body = new Mannequin(outfit);
+      this.group.add(this.body.object);
+    } else {
+      this.body.setColors?.(outfit.shirt, outfit.shorts);
     }
   }
 

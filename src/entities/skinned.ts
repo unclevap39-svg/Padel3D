@@ -139,6 +139,8 @@ export class SkinnedBody implements BodyRenderer {
   private arms: LimbRest[] = [];
   private legs: LimbRest[] = [];
   private feet: Array<{ foot: number; restDir: THREE.Vector3 }> = [];
+  private teeMat: THREE.MeshStandardMaterial | null = null;
+  private shortsMat: THREE.MeshStandardMaterial | null = null;
   /** Racket hand at rest: the line of the knuckles (little finger → index) and where the hand points. */
   private grip: { knuckles: THREE.Vector3; handDir: THREE.Vector3 } | null = null;
 
@@ -153,8 +155,13 @@ export class SkinnedBody implements BodyRenderer {
       const m = (mesh.material as THREE.MeshStandardMaterial).clone();
       mesh.material = m;
       const name = m.name;
-      if (name === 'tee') m.color.setHex(outfit.shirt);
-      else if (name === 'shorts') m.color.setHex(outfit.shorts);
+      if (name === 'tee') {
+        m.color.setHex(outfit.shirt);
+        this.teeMat = m;
+      } else if (name === 'shorts') {
+        m.color.setHex(outfit.shorts);
+        this.shortsMat = m;
+      }
       else if (name === 'hair') {
         m.color.setHex(outfit.hair).multiplyScalar(2.2);
         m.alphaTest = 0.4;
@@ -239,6 +246,11 @@ export class SkinnedBody implements BodyRenderer {
         this.bones[this.index.get(`thumb_${j}_${s}`)!].local.setFromAxisAngle(thumbAxis, side * curl * 0.5);
       }
     }
+  }
+
+  setColors(shirt: number, shorts: number): void {
+    this.teeMat?.color.setHex(shirt);
+    this.shortsMat?.color.setHex(shorts);
   }
 
   private drive(name: string, q: THREE.Quaternion): void {

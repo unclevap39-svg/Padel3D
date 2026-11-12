@@ -10,6 +10,14 @@ deux adversaires sont joués par l'ordinateur.
 - **Règles** : moteur indépendant du rendu, couvert par des tests unitaires
 - **Aucun service payant** : tous les assets sont générés par code ou sous licence CC0
 
+## Contenu
+
+- **Modes de jeu** : match rapide (1 set), match complet (2 sets gagnants), tie-break, tournoi en
+  trois tours de difficulté croissante, entraînement, défi du jour.
+- **Progression** : pièces et expérience gagnées à chaque match, niveaux, statistiques de carrière.
+- **Boutique et vestiaire** : raquettes, tenues, terrains et balles à débloquer avec les pièces
+  gagnées en jouant. Il n'y a aucun achat en argent réel ; tout est enregistré sur l'appareil.
+
 ## Lancer le projet
 
 ```bash
@@ -87,13 +95,14 @@ Après le premier chargement complet, le jeu fonctionne sans connexion.
 src/
   rules/     Règles du padel en TypeScript pur : terrain, score, arbitre d'un point, match
   physics/   Modèle de vol (traînée, Magnus, rebonds), prédicteur, solveur de coups, monde Rapier
-  core/      Simulation sans rendu (joueurs, service, échanges), boucle de jeu, réglages
+  core/      Simulation sans rendu (joueurs, service, échanges), boucle de jeu, réglages,
+             profil du joueur (pièces, niveaux, objets, modes de jeu)
   ai/        Interception de la balle, placement en double, choix de coups, 3 niveaux
   entities/  Joueur (logique), animation procédurale, modèle skinné, mannequin de secours, balle
   render/    Scène, terrain, textures procédurales, caméra, qualité adaptative
   input/     Joystick, geste de frappe, boutons, clavier, vibration
   audio/     Sons synthétisés (Web Audio) et annonce vocale du score
-  ui/        HUD, menus, écran d'installation
+  ui/        Accueil (modes, boutique, vestiaire, profil, réglages), HUD, menus
 tests/       Vitest : règles, physique, matchs complets
 tools/       Construction du modèle de joueur et des icônes
 scripts/     Aides de vérification visuelle (captures Playwright)

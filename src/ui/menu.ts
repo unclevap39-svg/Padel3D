@@ -7,6 +7,8 @@ export interface MenuCallbacks {
   onPlay: () => void;
   onResume: () => void;
   onQuit: () => void;
+  /** Back to the home screen (drawn by the Home component). */
+  onHome: () => void;
   onSettingsChanged: () => void;
   /** Android/desktop Chrome: triggers the native install prompt if one is available. */
   onInstall: () => Promise<boolean>;
@@ -64,8 +66,12 @@ export class Menu {
   }
 
   show(screen: Screen, opts: { inMatch?: boolean; endHtml?: string } = {}): void {
-    this.screen = screen;
     if (opts.inMatch !== undefined) this.inMatch = opts.inMatch;
+    if (screen === 'main') {
+      screen = null;
+      this.cb.onHome();
+    }
+    this.screen = screen;
     if (opts.endHtml !== undefined) this.endHtml = opts.endHtml;
     this.root.classList.toggle('hidden', screen === null);
     this.root.dataset.screen = screen ?? '';

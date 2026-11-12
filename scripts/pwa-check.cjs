@@ -20,7 +20,7 @@ const { chromium } = require('playwright');
   await ctx.setOffline(true);
   await page.reload({ waitUntil: 'load' });
   await page.waitForFunction(() => window.__padel, null, { timeout: 30000 });
-  const offline = await page.evaluate(() => { const g = window.__padel; g.startMatch(0); return { body: g.characters[0].body.constructor.name }; });
+  const offline = await page.evaluate(() => { const g = window.__padel; g.startMatch('quick', 0); return { body: g.characters[0].body.constructor.name }; });
   await page.waitForTimeout(3000);
   const state = await page.evaluate(() => ({ phase: window.__padel.sim.phase }));
   await page.screenshot({ path: 'shots/offline.png' });

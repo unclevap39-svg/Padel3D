@@ -197,7 +197,10 @@ export function createNetTexture(aniso: number): THREE.Texture {
 }
 
 /** Ball: optic-yellow felt with the white rubber seam, as an equirectangular map plus a fuzz normal map. */
-export function createBallTextures(): { map: THREE.Texture; normalMap: THREE.Texture } {
+export function createBallTextures(color = 0xd0e828): { map: THREE.Texture; normalMap: THREE.Texture } {
+  const feltR = (color >> 16) & 255;
+  const feltG = (color >> 8) & 255;
+  const feltB = color & 255;
   const w = 256;
   const h = 128;
   const [c, ctx] = makeCanvas(w, h);
@@ -234,9 +237,9 @@ export function createBallTextures(): { map: THREE.Texture; normalMap: THREE.Tex
       const fuzz = r();
       const v = 0.9 + (fuzz - 0.5) * 0.22;
       const k = (py * w + px) * 4;
-      img.data[k] = (208 * v) * (1 - seamMix) + 236 * seamMix;
-      img.data[k + 1] = (232 * v) * (1 - seamMix) + 236 * seamMix;
-      img.data[k + 2] = (40 * v) * (1 - seamMix) + 224 * seamMix;
+      img.data[k] = Math.min(255, feltR * v) * (1 - seamMix) + 236 * seamMix;
+      img.data[k + 1] = Math.min(255, feltG * v) * (1 - seamMix) + 236 * seamMix;
+      img.data[k + 2] = Math.min(255, feltB * v) * (1 - seamMix) + 224 * seamMix;
       img.data[k + 3] = 255;
       height[py * w + px] = fuzz * (1 - seamMix) + seamMix * -1.5;
     }

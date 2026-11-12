@@ -54,6 +54,8 @@ export class Scoring {
   constructor(config: Partial<MatchConfig> = {}, firstServer: PlayerId = 0) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.serveIndex = Math.max(0, SERVE_ORDER.indexOf(firstServer));
+    // A match configured with a tie-break at 0-0 is a single tie-break.
+    if (this.config.tiebreakAt === 0) this.tiebreak = true;
   }
 
   get server(): PlayerId {

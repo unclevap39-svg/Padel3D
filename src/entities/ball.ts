@@ -11,6 +11,7 @@ export class BallView {
   static readonly VISUAL_SCALE = 1.35;
   readonly group = new THREE.Group();
   private mesh: THREE.Mesh;
+  private material!: THREE.MeshStandardMaterial;
   private shadow: THREE.Mesh;
   private trail: THREE.Mesh;
   private trailPositions: Float32Array;
@@ -31,6 +32,7 @@ export class BallView {
       emissive: 0x3a4208,
       emissiveIntensity: 0.35,
     });
+    this.material = mat;
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_RADIUS * BallView.VISUAL_SCALE, 24, 16), mat);
     this.mesh.castShadow = true;
     this.group.add(this.mesh);
@@ -77,6 +79,18 @@ export class BallView {
     this.trail.frustumCulled = false;
     this.trail.renderOrder = 5;
     this.group.add(this.trail);
+  }
+
+  /** Changes the felt colour (shop items). */
+  setColor(color: number): void {
+    const tex = createBallTextures(color);
+    this.material.map?.dispose();
+    this.material.normalMap?.dispose();
+    this.material.map = tex.map;
+    this.material.normalMap = tex.normalMap;
+    this.material.emissive.setHex(color).multiplyScalar(0.22);
+    this.material.emissiveIntensity = 1;
+    this.material.needsUpdate = true;
   }
 
   reset(): void {

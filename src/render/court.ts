@@ -16,6 +16,8 @@ const L = COURT.halfLength;
 
 export interface CourtBuild {
   group: THREE.Group;
+  /** Playing surface: its colour can be changed (shop items). */
+  turfMaterial: THREE.MeshStandardMaterial;
   glassMaterial: THREE.MeshStandardMaterial;
   /** Wire mesh of the wall the camera looks through, faded so it does not veil the court. */
   nearFenceMaterial: THREE.MeshStandardMaterial;
@@ -448,7 +450,7 @@ export function buildCourt(aniso: number): CourtBuild {
   addBoard(10.5, 0, 29, -Math.PI / 2);
   group.add(new THREE.Mesh(mergeGeometries(boards), boardMat));
 
-  return { group, glassMaterial, nearFenceMaterial, floodlights };
+  return { group, turfMaterial: turfMat, glassMaterial, nearFenceMaterial, floodlights };
 }
 
 /** Night sky dome: deep blue overhead, lighter haze towards the horizon from the stadium lights. */

@@ -11,7 +11,7 @@ const sharp = require('sharp');
   page.on('pageerror', (e) => console.log('[pageerror]', e.message));
   await page.goto('http://localhost:5173/?q=high&noinstall', { waitUntil: 'load' });
   await page.waitForFunction(() => window.__padel, null, { timeout: 30000 });
-  await page.evaluate(() => { const g = window.__padel; g.startMatch(2); });
+  await page.evaluate(() => { const g = window.__padel; g.startMatch('quick', 2); });
   await page.waitForTimeout(3500);
   await page.evaluate(([cx, cy, cz]) => {
     const g = window.__padel; g.freeze = true; g.hud.show(false); g.controls.setEnabled(false);

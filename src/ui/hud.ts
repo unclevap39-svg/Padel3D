@@ -78,6 +78,12 @@ export class Hud {
     this.bannerTimer = window.setTimeout(() => this.banner.parentElement!.classList.remove('show'), seconds * 1000);
   }
 
+  /** Removes the centre message at once (before a full-screen panel opens). */
+  clearBanner(): void {
+    window.clearTimeout(this.bannerTimer);
+    this.banner.parentElement!.classList.remove('show');
+  }
+
   setSpeed(kmh: number): void {
     (this.speed.querySelector('.value') as HTMLElement).textContent = String(Math.round(kmh));
     this.speed.classList.add('show');
