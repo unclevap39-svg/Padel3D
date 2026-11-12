@@ -139,6 +139,8 @@ export class SkinnedBody implements BodyRenderer {
   private arms: LimbRest[] = [];
   private legs: LimbRest[] = [];
   private feet: Array<{ foot: number; restDir: THREE.Vector3 }> = [];
+  /** Racket hand at rest: the line of the knuckles (little finger → index) and where the hand points. */
+  private grip: { knuckles: THREE.Vector3; handDir: THREE.Vector3 } | null = null;
 
   constructor(model: PlayerModel, outfit: Outfit, darkSkin: boolean) {
     this.proportions = model.proportions;
@@ -222,6 +224,9 @@ export class SkinnedBody implements BodyRenderer {
 
       // Fingers: a fixed curl. The racket hand closes around the grip, the other stays relaxed.
       const knuckles = head(`index_01_${s}`).clone().sub(head(`pinky_01_${s}`)).normalize();
+      if (s === 'r') {
+        this.grip = { knuckles: knuckles.clone(), handDir: head('middle_01_r').clone().sub(head('hand_r')).normalize() };
+      }
       const curl = s === 'r' ? 1.0 : 0.4;
       for (const f of ['index', 'middle', 'ring', 'pinky']) {
         for (const j of ['01', '02', '03']) {
@@ -302,10 +307,15 @@ export class SkinnedBody implements BodyRenderer {
     };
     for (let i = 0; i < 2; i++) {
       solve(this.arms[i], pose.wrist[i], pose.elbow[i]);
-      // The hand follows the forearm.
+      // The hand follows the forearm; the racket hand also turns so the fist wraps the handle.
       const hand = B[this.arms[i].end];
       hand.world.copy(B[this.arms[i].lower].world);
       hand.driven = true;
+      if (i === 1 && this.grip) {
+        _a.subVectors(hand.pos, B[this.arms[i].lower].pos).normalize();
+        limbRotation(this.grip.knuckles, this.grip.handDir, pose.racketDir, _a, _q);
+        hand.world.slerp(_q, 0.7);
+      }
 
       solve(this.legs[i], pose.ankle[i], pose.knee[i]);
       const f = this.feet[i];

@@ -439,6 +439,7 @@ export class Simulation {
     this.plans = [null, null, null, null];
     for (const p of this.players) {
       p.moveTo = null;
+      p.prep = null;
       if (!p.isHuman) {
         p.wishX = 0;
         p.wishZ = 0;
@@ -489,6 +490,21 @@ export class Simulation {
       }
     }
     this.hitterId = bestP ? bestP.id : null;
+    // The player about to hit takes the racket back early, as the ball approaches.
+    for (const p of this.players) p.prep = null;
+    const plan = bestP ? this.plans[bestP.id] : null;
+    if (bestP && plan && (bestP.isHuman || !this.leaveBall)) {
+      const stroke: StrokeKind = plan.overhead
+        ? 'bandeja'
+        : plan.volley
+          ? plan.backhand
+            ? 'volley_bh'
+            : 'volley_fh'
+          : plan.backhand
+            ? 'backhand'
+            : 'forehand';
+      bestP.prep = { stroke, t: plan.t };
+    }
   }
 
   private tryHumanSwing(intent: ShotIntent): void {
@@ -595,6 +611,10 @@ export class Simulation {
     this.stillT = 0;
     this.rallyHits++;
     this.leaveBall = false;
+    for (const q of this.players) {
+      q.prep = null;
+      if (q.team !== p.team) q.splitT = this.now;
+    }
     this.events.push({
       kind: 'hit',
       player: p.id,

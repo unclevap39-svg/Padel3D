@@ -1,4 +1,4 @@
-import type { Swing } from '../core/types';
+import type { StrokeKind, Swing } from '../core/types';
 import { COURT, type PlayerId, type Team, teamOf } from '../rules/court';
 
 export type Mood = 'play' | 'celebrate' | 'dejected';
@@ -38,6 +38,10 @@ export class Player {
   isHuman = false;
   /** Server holding the ball out before dropping it. */
   holdingBall = false;
+  /** Shot this player is getting ready for: the racket goes back before the swing is asked for. */
+  prep: { stroke: StrokeKind; t: number } | null = null;
+  /** Time the opponents last struck the ball: triggers the split step. */
+  splitT = -10;
 
   constructor(id: PlayerId) {
     this.id = id;

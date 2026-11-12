@@ -78,6 +78,8 @@ export class Game {
   /** Development aid: fixed camera for close-up checks. */
   /** Development aid: stop the simulation clock while still drawing the characters. */
   freeze = false;
+  /** Development aid: slows the simulation down to inspect movement frame by frame. */
+  debugTimeScale = 1;
   debugCam: { pos: [number, number, number]; look: [number, number, number]; fov?: number } | null = null;
 
   constructor(opts: GameOptions) {
@@ -258,7 +260,7 @@ export class Game {
       const target = this.clock < this.slowUntil ? 0.28 : 1;
       this.timeScale += (target - this.timeScale) * Math.min(1, dt * 6);
       this.camera.focus += ((this.clock < this.slowUntil ? 1 : 0) - this.camera.focus) * Math.min(1, dt * 4);
-      const simDt = dt * this.timeScale;
+      const simDt = dt * this.timeScale * this.debugTimeScale;
       this.sim.setHumanMove(this.controls.move.x, this.controls.move.z);
       this.acc += simDt;
       let steps = 0;
