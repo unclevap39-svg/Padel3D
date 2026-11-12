@@ -1,39 +1,66 @@
-import { BallView } from './entities/ball';
-import { PhysicsWorld, TICK_DT, initPhysics } from './physics/world';
-import { Stage } from './render/stage';
+import { Game } from './core/game';
+import { loadSettings } from './core/settings';
+import { initPhysics } from './physics/world';
+import type { QualityTier } from './render/stage';
+import { isMobile, isStandalone } from './ui/menu';
 
-async function boot() {
-  await initPhysics();
-  const canvas = document.getElementById('game') as HTMLCanvasElement;
-  const stage = new Stage(canvas, 'high');
-  const world = new PhysicsWorld();
-  const ball = new BallView();
-  stage.scene.add(ball.group);
-  const serve = () => world.setBall({ px: 2, py: 1.1, pz: 8.5, vx: -2.2, vy: 4.2, vz: -15, wx: -80, wy: 0, wz: 0 });
-  serve();
-  let acc = 0;
-  let last = performance.now();
-  let t = 0;
-  document.getElementById('loading')?.classList.add('done');
-  window.addEventListener('resize', () => stage.resize());
-  const frame = (now: number) => {
-    const dt = Math.min(0.05, (now - last) / 1000);
-    last = now;
-    acc += dt;
-    while (acc >= TICK_DT) {
-      world.tick();
-      acc -= TICK_DT;
-      t += TICK_DT;
-      if (t > 4) {
-        t = 0;
-        serve();
-      }
-    }
-    ball.update(world.ball, world.ballRotation(), stage.camera);
-    stage.render();
-    requestAnimationFrame(frame);
-  };
-  requestAnimationFrame(frame);
-  (window as unknown as Record<string, unknown>).__dbg = { stage, world };
+interface InstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
-boot();
+
+const fill = document.getElementById('loading-fill') as HTMLElement;
+const text = document.getElementById('loading-text') as HTMLElement;
+function progress(p: number, label: string): void {
+  fill.style.width = `${Math.round(p * 100)}%`;
+  text.textContent = label;
+}
+const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+
+// Android / desktop Chrome hand us the install prompt; keep it for the install screen.
+let installEvent: InstallPromptEvent | null = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installEvent = e as InstallPromptEvent;
+});
+
+async function boot(): Promise<void> {
+  const params = new URLSearchParams(location.search);
+  const settings = loadSettings();
+  progress(0.1, 'Moteur physique…');
+  await initPhysics();
+  progress(0.45, 'Terrain et éclairage…');
+  await nextFrame();
+  const q = params.get('q');
+  const game = new Game({
+    canvas: document.getElementById('game') as HTMLCanvasElement,
+    ui: document.getElementById('ui') as HTMLElement,
+    settings,
+    forceTier: q === 'low' || q === 'medium' || q === 'high' ? (q as QualityTier) : undefined,
+    canInstallNatively: () => installEvent !== null,
+    promptInstall: async () => {
+      if (!installEvent) return false;
+      await installEvent.prompt();
+      const choice = await installEvent.userChoice;
+      installEvent = null;
+      return choice.outcome === 'accepted';
+    },
+  });
+  progress(0.8, 'Joueurs…');
+  await nextFrame();
+  game.frame(0.016); // compile shaders before revealing the scene
+  progress(1, 'Prêt');
+  await nextFrame();
+  document.getElementById('loading')?.classList.add('done');
+  // Opened in a mobile browser tab: suggest installing first (once).
+  const suggestInstall = isMobile() && !isStandalone() && !settings.installDismissed && !params.has('noinstall');
+  game.showMenu(suggestInstall);
+  game.start();
+  (window as unknown as { __padel: unknown }).__padel = game;
+  if (params.has('autoplay')) game.startMatch();
+}
+
+boot().catch((err) => {
+  console.error(err);
+  text.textContent = 'Impossible de démarrer le jeu sur cet appareil (WebGL 2 requis).';
+});
