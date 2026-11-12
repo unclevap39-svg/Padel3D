@@ -33,10 +33,10 @@ const { chromium } = require('playwright');
     await B.evaluate(() => { window.__padel.profile.name = 'Bruno'; });
     await B.click('.home-nav [data-tab=online]');
     await A.screenshot({ path: 'shots/online-lobby.png' });
-    await A.click('[data-queue="r2"]');
+    await A.click(how === 'classic' ? '[data-queue="c2"]' : '[data-queue="r2"]');
     await A.waitForTimeout(1200);
     await A.screenshot({ path: 'shots/online-search.png' });
-    await B.click('[data-queue="r2"]');
+    await B.click(how === 'classic' ? '[data-queue="c2"]' : '[data-queue="r2"]');
   }
   const playing = (p) => p.waitForFunction(() => window.__padel.net && window.__padel.playing, null, { timeout: 45000 });
   await Promise.all([playing(A), playing(B)]);
@@ -60,6 +60,17 @@ const { chromium } = require('playwright');
   const mid = await Promise.all([host.evaluate(() => ({ hits: window.__hits, points: window.__padel.sim.match.scoring.points, games: window.__padel.sim.match.scoring.games, visible: window.__padel.characters.map((c) => c.group.visible) })),
     guest.evaluate(() => ({ ready: window.__padel.sim.ready, points: window.__padel.sim.match.scoring.points, games: window.__padel.sim.match.scoring.games, hud: document.querySelector('.scoreboard').innerText.replace(/\s+/g, ' ') }))]);
   console.log('after 25 s', JSON.stringify(mid));
+  if (how === 'invite') {
+    // The guest leaves abruptly: the host must notice and win by forfeit.
+    await guest.context().close();
+    await host.waitForFunction(() => window.__padel.menu.current === 'end', null, { timeout: 60000 }).catch(() => {});
+    const forfeit = await host.evaluate(() => ({ screen: window.__padel.menu.current, text: (document.querySelector('.menu .panel') || { innerText: '' }).innerText.replace(/\s+/g, ' '), won: window.__padel.summary.won }));
+    console.log('after guest left', JSON.stringify(forfeit));
+    await host.screenshot({ path: 'shots/online-forfeit.png' });
+    console.log('errors', JSON.stringify(errors));
+    await browser.close();
+    return;
+  }
   // Finish the match quickly on the host; the guest must end on the same result.
   await host.evaluate(() => { const g = window.__padel; const s = g.sim; let n = 0;
     while (s.phase !== 'match_over' && n < 3e6) { if (s.phase === 'serve_ready') for (const id of [0, 2]) if (s.server === s.players[id]) s.shot(id, { type: 'drive', power: 0.5, angle: s.match.referee.serveSide === 'right' ? -0.4 : 0.4 }); s.tick(); n++; if (n % 4 === 0) { const ev = s.drainEvents(); g.net.host.afterFrame(ev, 1 / 30); g.handleEvents(ev); } } });
