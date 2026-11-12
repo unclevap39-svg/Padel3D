@@ -83,8 +83,11 @@ export function aeroAccel(b: BallState, out: { x: number; y: number; z: number }
 }
 
 /**
- * Impulse-based bounce of a spinning ball on a fixed surface with unit normal n (pointing
- * away from the surface). Coulomb friction converts spin into speed and back.
+ * Bounce of a spinning ball on a fixed surface with unit normal n (pointing away from the
+ * surface), as the predictor sees it. It is calibrated on what the physics engine does, so that
+ * a predicted path stays within a few tens of centimetres of the real one after a bounce:
+ * friction takes μ·|vn| off the sliding speed (no more than what stops the slip) and leaves
+ * the spin as it was. `tests/physics.test.ts` holds the two side by side.
  */
 export function bounceOff(b: BallState, nx: number, ny: number, nz: number, s: SurfaceProps): void {
   const vn = b.vx * nx + b.vy * ny + b.vz * nz;
@@ -108,15 +111,10 @@ export function bounceOff(b: BallState, nx: number, ny: number, nz: number, s: S
     tz /= slip;
     // Impulse that would stop the slip entirely: slip / (1/m + r²/I) = 0.4 m slip for a shell.
     const stick = slip / (1 + (BALL_MASS * BALL_RADIUS * BALL_RADIUS) / BALL_INERTIA);
-    const jt = Math.min(s.friction * jn, stick);
+    const jt = Math.min(s.friction * -vn, stick);
     b.vx -= jt * tx;
     b.vy -= jt * ty;
     b.vz -= jt * tz;
-    // Torque impulse: (-r n) × (-jt t) = r jt (n × t), divided by I/m.
-    const k = (BALL_RADIUS * jt * BALL_MASS) / BALL_INERTIA;
-    b.wx += k * (ny * tz - nz * ty);
-    b.wy += k * (nz * tx - nx * tz);
-    b.wz += k * (nx * ty - ny * tx);
   }
 }
 

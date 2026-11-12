@@ -32,6 +32,7 @@ export class Ai {
     const ref = sim.match.referee;
     const pred = sim.prediction;
     sim.leaveBall = false;
+    sim.ballGoingOut = false;
     if (!pred || ref.floorBounces !== 0) return;
     const receiving = otherTeam(hitTeam);
     let goingOut = pred.net || pred.wallBeforeBounce || (pred.out && !pred.firstBounce);
@@ -44,6 +45,7 @@ export class Ai {
       }
     }
     if (!goingOut) return;
+    sim.ballGoingOut = true;
     const judge = sim.teamPlayers(receiving).find((p) => !p.isHuman);
     if (!judge) return;
     const lvl = sim.levelOf(judge);
@@ -70,7 +72,8 @@ export class Ai {
     d += sim.gauss() * err;
     return {
       type: 'drive',
-      power: (second ? 0.25 : 0.35) + 0.5 * lvl.power,
+      // Pace grows with the level: about 60 km/h for a beginner, 75 for a strong player.
+      power: (second ? 0.05 : 0.15) + 0.75 * lvl.power,
       target: { x: box * bx, z: p.dir * d },
     };
   }
@@ -246,9 +249,15 @@ export class Ai {
     }
     // Harder to control a ball taken off the glass or far from the ideal height.
     const difficulty = 1 + (plan.afterWall ? 0.35 : 0) + Math.min(0.5, Math.abs(plan.ball.y - 1.0) * 0.3);
-    const err = lvl.aimError * difficulty;
+    // At full stretch the ball comes back shorter, slower and less accurate: pressure pays.
+    const stretch = clamp(1 - plan.slack / 0.6, 0, 1);
+    // A fast ball is hard to control, and nerves grow as the rally goes on.
+    const pace = clamp((plan.speed - 11) / 13, 0, 1);
+    const tension = 1 + 0.035 * Math.max(0, sim.rallyHits - 8);
+    const err = lvl.aimError * difficulty * (1 + 1.5 * stretch) * (1 + 1.3 * pace) * tension;
+    power *= (1 - 0.5 * stretch) * (1 - 0.25 * pace);
     const x = pick.x + sim.gauss() * err;
-    const d = clamp(pick.d + sim.gauss() * err * 1.2, 1.2, COURT.halfLength + 2.5);
+    const d = clamp((pick.d - 1.6 * stretch) + sim.gauss() * err * 1.2, 1.2, COURT.halfLength + 2.5);
     return { type, power, target: { x, z: p.dir * d } };
   }
 }

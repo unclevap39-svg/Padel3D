@@ -1,39 +1,90 @@
-// Dev helper: checks button-only hitting — serve with FRAPPE, aim with the joystick, no swipe.
+// Dev helper: checks the shot buttons — hold to charge the gauge, release to hit, joystick to
+// aim, pause button reachable — on a phone-sized touch screen.
 const { chromium } = require('playwright');
 (async () => {
+  const base = process.argv[2] || 'http://localhost:5173';
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('http://localhost:5173/?q=low&noinstall', { waitUntil: 'load' });
+  await page.goto(`${base}/?q=low&noinstall`, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__padel, null, { timeout: 30000 });
-  await page.evaluate(() => { const g = window.__padel; window.__shots = []; const orig = g.controls.onShot; g.controls.onShot = (i) => { window.__shots.push({ ...i }); orig(i); }; g.startMatch('quick', 0); });
+  await page.evaluate(() => window.__padel.startMatch('quick', 0));
   await page.waitForFunction(() => window.__padel.sim.phase === 'serve_ready', null, { timeout: 20000 });
   await page.waitForTimeout(400);
-  await page.screenshot({ path: 'shots/buttons-serve.png' });
   const prompt = await page.evaluate(() => document.querySelector('.prompt').textContent);
-  // A swipe on the right of the screen (outside the buttons) must do nothing any more.
   const cdp = await ctx.newCDPSession(page);
-  const pt = (x, y) => [{ x, y, id: 7, radiusX: 4, radiusY: 4, force: 1 }];
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(640, 120) });
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt(600, 40) });
+  const pt = (x, y, id) => ({ x, y, id, radiusX: 4, radiusY: 4, force: 1 });
+  const centre = async (sel) => {
+    const b = await page.locator(sel).boundingBox();
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  };
+  const state = () =>
+    page.evaluate(() => {
+      const g = window.__padel;
+      const c = g.sim.humanCharge();
+      const aim = g.markers.aim;
+      return {
+        phase: g.sim.phase,
+        charge: c && { type: c.type, gauge: +c.gauge.toFixed(2), held: c.held },
+        aimShown: aim.visible,
+        aimAt: [+aim.position.x.toFixed(2), +aim.position.z.toFixed(2)],
+        gaugeShown: document.querySelector('.gauge').classList.contains('show'),
+        ring: getComputedStyle(document.querySelector('.shot-btn.drive')).getPropertyValue('--g'),
+      };
+    });
+
+  // A swipe on the right of the screen (outside the buttons) does nothing.
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [pt(640, 120, 7)] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [pt(600, 40, 7)] });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(200);
+  const afterSwipe = await state();
+
+  // Serve: hold FRAPPE (the gauge fills, the aim marker sits in the service box), push the
+  // joystick to move the marker, release to serve.
+  const drive = await centre('.shot-btn.drive');
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [pt(drive.x, drive.y, 8)] });
+  await page.waitForTimeout(450);
+  const holding = await state();
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [pt(drive.x, drive.y, 8), pt(160, 250, 9)] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [pt(drive.x, drive.y, 8), pt(215, 250, 9)] });
+  await page.waitForTimeout(200);
+  const aimedRight = await state();
+  await page.screenshot({ path: 'shots/buttons-serve.png' });
+  // Lift the thumb off FRAPPE only (the joystick stays down): the serve must leave.
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [pt(drive.x, drive.y, 8)] });
+  await page.waitForTimeout(1300);
+  const afterServe = await page.evaluate(() => ({ phase: window.__padel.sim.phase, hits: window.__padel.sim.rallyHits, charge: window.__padel.sim.humanCharge() }));
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+  // Rally: wait for the opponents' ball, hold FRAPPE and take a picture of the markers.
+  let rally = null;
+  for (let i = 0; i < 400 && !rally; i++) {
+    const s = await page.evaluate(() => {
+      const g = window.__padel;
+      return { phase: g.sim.phase, team: g.view.lastHitTeam, landing: g.markers.landing.visible };
+    });
+    if (s.phase === 'rally' && s.team === 1) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [pt(drive.x, drive.y, 8)] });
+      await page.waitForTimeout(300);
+      rally = { ...(await state()), landing: s.landing };
+      await page.screenshot({ path: 'shots/buttons-play.png' });
+      await page.waitForTimeout(1500);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } else await page.waitForTimeout(50);
+  }
+  const afterRally = await page.evaluate(() => ({ phase: window.__padel.sim.phase, hits: window.__padel.sim.rallyHits }));
+
+  // The pause button must be reachable through the touch layer.
+  const pause = await centre('.pause-btn');
+  const top = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.className, [pause.x, pause.y]);
+  await page.tap('.pause-btn');
   await page.waitForTimeout(300);
-  const afterSwipe = await page.evaluate(() => ({ shots: window.__shots.length, phase: window.__padel.sim.phase }));
-  await page.tap('.shot-btn.drive');
-  await page.waitForTimeout(1500);
-  const afterServe = await page.evaluate(() => ({ shots: window.__shots, phase: window.__padel.sim.phase, hits: window.__padel.sim.rallyHits }));
-  // Hold the joystick to the left and press LOB: the shot must aim left.
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(160, 250) });
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt(100, 250) });
-  const lob = await page.locator('.shot-btn.lob').boundingBox();
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [...pt(100, 250), { x: lob.x + lob.width / 2, y: lob.y + lob.height / 2, id: 8, radiusX: 4, radiusY: 4, force: 1 }] });
-  await page.waitForTimeout(150);
-  await page.screenshot({ path: 'shots/buttons-play.png' });
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  const aimed = await page.evaluate(() => window.__shots[window.__shots.length - 1]);
+  const paused = await page.evaluate(() => window.__padel.menu.current);
+  await page.screenshot({ path: 'shots/buttons-pause.png' });
   const boxes = await page.evaluate(() => [...document.querySelectorAll('.shot-btn')].map((b) => { const r = b.getBoundingClientRect(); return { t: b.textContent, x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), bottomGap: Math.round(innerHeight - r.bottom) }; }));
-  console.log(JSON.stringify({ prompt, afterSwipe, afterServe, aimed, boxes, errors }, null, 1));
+  console.log(JSON.stringify({ prompt, afterSwipe, holding, aimedRight, afterServe, rally, afterRally, pauseTop: top, paused, boxes, errors }, null, 1));
   await browser.close();
 })();

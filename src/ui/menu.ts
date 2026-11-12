@@ -108,7 +108,7 @@ export class Menu {
             <h2>Réglages</h2>
             <label class="field"><span>Aide au placement <b id="assist-val">${Math.round(s.assist * 100)} %</b></span>
               <input type="range" min="0" max="100" step="5" value="${Math.round(s.assist * 100)}" data-set="assist" /></label>
-            <p class="note">À 0 % vous visez et vous déplacez seul. Plus haut, la balle est ramenée dans le terrain et votre joueur se rapproche de la balle quand vous lâchez le joystick.</p>
+            <p class="note">À 0 % vous vous placez seul et vos balles sont moins précises. Plus haut, votre joueur court à la balle dès que vous appuyez sur un bouton de frappe, et vos balles restent plus près de l'endroit visé.</p>
             <label class="check"><input type="checkbox" data-set="sound" ${s.sound ? 'checked' : ''} /> Sons</label>
             <label class="check"><input type="checkbox" data-set="voice" ${s.voice ? 'checked' : ''} /> Annonce vocale du score</label>
             <label class="check"><input type="checkbox" data-set="haptics" ${s.haptics ? 'checked' : ''} /> Vibration à la frappe <small>(Android uniquement)</small></label>
@@ -133,11 +133,13 @@ export class Menu {
             <h2>Comment jouer</h2>
             <ul class="help">
               <li><b>Se déplacer</b> : posez le pouce gauche n'importe où à gauche et glissez : c'est le joystick.</li>
-              <li><b>Frapper</b> : trois boutons à droite. <b>FRAPPE</b> pour le coup normal, <b>LOB</b> pour passer au-dessus des adversaires, <b>SMASH</b> sur une balle haute.</li>
-              <li><b>Viser</b> : la balle part du côté où pointe le joystick au moment où vous appuyez ; joystick relâché, elle part droit devant.</li>
-              <li><b>Service</b> : appuyez sur FRAPPE. La balle vise le carré en diagonale ; le joystick permet de la décaler. Deux essais.</li>
+              <li><b>Frapper</b> : trois boutons à droite. <b>FRAPPE</b> pour le coup normal, <b>LOB</b> pour passer au-dessus des adversaires, <b>SMASH</b> sur une balle haute (le bouton s'allume quand c'est possible). Appuyez dès que la balle vient vers vous : votre joueur y va et frappe au bon moment.</li>
+              <li><b>Doser</b> : plus vous maintenez le bouton, plus la jauge monte et plus la balle part fort et loin. Zone verte : idéal. Zone rouge : très fort, mais la balle risque de sortir. Relâchez pour figer la puissance.</li>
+              <li><b>Viser</b> : bouton enfoncé, le joystick déplace le cercle jaune sur le terrain adverse : c'est là que la balle ira. Joystick relâché, elle revient vers le centre.</li>
+              <li><b>Repères</b> : le cercle blanc de votre côté montre où la balle adverse va rebondir. « Laissez-la » s'affiche quand elle va sortir.</li>
+              <li><b>Service</b> : maintenez FRAPPE pour doser, visez dans le carré avec le joystick, relâchez. Deux essais.</li>
               <li><b>Règles</b> : un seul rebond au sol ; la balle peut ensuite toucher les vitres. Votre balle doit rebondir au sol chez l'adversaire avant de toucher ses vitres ou son grillage.</li>
-              <li>Clavier : flèches pour bouger, Espace frapper, K lob, L smash.</li>
+              <li>Clavier : flèches pour bouger et viser, Espace frapper, K lob, L smash (maintenir pour doser), Échap pause.</li>
             </ul>
             <button class="primary" data-act="back">OK</button>
           </div>`;

@@ -1,7 +1,9 @@
 import type { Simulation } from '../core/sim';
-import type { SimEvent } from '../core/types';
+import type { ShotType, SimEvent } from '../core/types';
 import type { PlayerId } from '../rules/court';
 import { type GuestMsg, type Link, MOODS, SNAPSHOT_RATE, STROKES, type Snapshot, round } from './protocol';
+
+const shotType = (t: unknown): ShotType => (t === 'lob' || t === 'smash' ? t : 'drive');
 
 /**
  * Host side of an online match: feeds the guest's controls into the real simulation and sends
@@ -25,11 +27,19 @@ export class HostSession {
       const x = Math.max(-1, Math.min(1, Number(msg.x) || 0));
       const z = Math.max(-1, Math.min(1, Number(msg.z) || 0));
       this.sim.setMove(this.guest, -x, -z);
+      // The aim is relative to the player's own view, so it needs no mirroring.
+      this.sim.setAim(this.guest, x);
+    } else if (msg.k === 'p') {
+      this.sim.press(this.guest, shotType(msg.t));
+    } else if (msg.k === 'r') {
+      this.sim.release(this.guest);
     } else if (msg.k === 'shot' && msg.i && typeof msg.i === 'object') {
-      const type = msg.i.type === 'lob' || msg.i.type === 'smash' ? msg.i.type : 'drive';
-      const power = Math.max(0, Math.min(1, Number(msg.i.power) || 0));
-      const angle = Math.max(-1.2, Math.min(1.2, Number(msg.i.angle) || 0));
-      this.sim.shot(this.guest, { type, power, angle });
+      const i = msg.i as { type?: unknown; power?: unknown; aim?: unknown; angle?: unknown };
+      const power = Math.max(0, Math.min(1, Number(i.power) || 0));
+      // Older versions of the game sent an angle in radians instead of a stick position.
+      const raw = typeof i.aim === 'number' ? i.aim : typeof i.angle === 'number' ? i.angle / 0.62 : undefined;
+      const aim = raw === undefined || !Number.isFinite(raw) ? undefined : Math.max(-1, Math.min(1, raw));
+      this.sim.shot(this.guest, { type: shotType(i.type), power, aim });
     }
   }
 

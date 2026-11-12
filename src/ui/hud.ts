@@ -1,3 +1,4 @@
+import { IDEAL_START, OVER_START } from '../core/shots';
 import type { Scoring } from '../rules/scoring';
 import type { PlayerId } from '../rules/court';
 import { teamOf } from '../rules/court';
@@ -19,8 +20,13 @@ export class Hud {
   private speed: HTMLElement;
   private prompt: HTMLElement;
   private fps: HTMLElement;
+  private hintEl: HTMLElement;
+  private gauge: HTMLElement;
+  private gaugeFill: HTMLElement;
+  private gaugeShown = false;
   private bannerTimer = 0;
   private speedTimer = 0;
+  private hintTimer = 0;
 
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud hidden');
@@ -50,6 +56,16 @@ export class Hud {
     this.root.appendChild(this.prompt);
     this.fps = el('div', 'fps');
     this.root.appendChild(this.fps);
+    this.hintEl = el('div', 'hint');
+    this.root.appendChild(this.hintEl);
+    // Power gauge, drawn above the player's head: soft, ideal and overhit zones.
+    this.gauge = el(
+      'div',
+      'gauge',
+      `<div class="gauge-track"><i class="gauge-ideal" style="left:${IDEAL_START * 100}%;width:${(OVER_START - IDEAL_START) * 100}%"></i><i class="gauge-over" style="left:${OVER_START * 100}%"></i><b class="gauge-fill"></b></div>`,
+    );
+    this.gaugeFill = this.gauge.querySelector('.gauge-fill')!;
+    this.root.appendChild(this.gauge);
     parent.appendChild(this.root);
   }
 
@@ -100,6 +116,29 @@ export class Hud {
   setPrompt(text: string | null): void {
     this.prompt.textContent = text ?? '';
     this.prompt.classList.toggle('show', !!text);
+  }
+
+  /** Short coaching message under the banner ("too far", "leave it"...). */
+  hint(text: string, seconds = 1.3): void {
+    this.hintEl.textContent = text;
+    this.hintEl.classList.add('show');
+    window.clearTimeout(this.hintTimer);
+    this.hintTimer = window.setTimeout(() => this.hintEl.classList.remove('show'), seconds * 1000);
+  }
+
+  /** Power gauge at a screen position (CSS pixels), or hidden with `null`. */
+  setGauge(g: number | null, x = 0, y = 0): void {
+    if (g === null) {
+      if (this.gaugeShown) this.gauge.classList.remove('show');
+      this.gaugeShown = false;
+      return;
+    }
+    if (!this.gaugeShown) this.gauge.classList.add('show');
+    this.gaugeShown = true;
+    this.gauge.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
+    this.gaugeFill.style.width = `${Math.round(g * 100)}%`;
+    this.gauge.classList.toggle('ideal', g >= IDEAL_START && g <= OVER_START);
+    this.gauge.classList.toggle('over', g > OVER_START);
   }
 
   setFps(text: string | null): void {

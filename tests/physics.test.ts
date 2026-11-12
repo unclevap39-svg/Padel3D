@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { BALL_RADIUS, type BallState, predict, solveShot } from '../src/physics/ballistics';
-import { PHYSICS_DT, PhysicsWorld, initPhysics } from '../src/physics/world';
+import { PHYSICS_DT, PhysicsWorld, TICK_DT, initPhysics } from '../src/physics/world';
 
 const ball = (p: Partial<BallState>): BallState => ({ px: 0, py: 1, pz: 0, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0, ...p });
 
@@ -182,4 +182,57 @@ describe('predictor and shot solver', () => {
     expect(sol.ok).toBe(true);
     expect(sol.vy).toBeLessThan(0);
   });
+});
+
+/** Distance between the predicted and the simulated ball `after` seconds past its n-th contact. */
+function drift(start: BallState, after: number, contacts: number): number | null {
+  const w = new PhysicsWorld();
+  w.random = () => 0.5;
+  w.setBall(start);
+  const pred = predict(start, 5, 0, 1);
+  let seen = 0;
+  let tHit = -1;
+  for (let i = 1; i < 5 / TICK_DT; i++) {
+    w.tick();
+    const t = i * TICK_DT;
+    for (const c of w.contacts) {
+      if (c.surface === 'fence' || c.surface === 'net') return null; // the mesh scatters at random
+      seen++;
+      if (seen === contacts) tHit = t;
+    }
+    if (tHit >= 0 && t >= tHit + after) {
+      const s = pred.samples.find((x) => x.t >= t - 1e-6);
+      if (!s) return null;
+      const b = w.ball;
+      return Math.hypot(s.x - b.px, s.y - b.py, s.z - b.pz);
+    }
+  }
+  return null;
+}
+
+describe('predictor after a bounce', () => {
+  // Players run to where the ball is predicted to be: after a bounce the prediction must stay
+  // close to the real path, or they head for the wrong spot and jump when the ball lands.
+  const shots: Array<[string, Parameters<typeof solveShot>[0]]> = [
+    ['serve', { from: { x: 2.1, y: 0.55, z: 7.3 }, target: { x: -2.4, z: -5.3 }, speed: 17, spin: 'slice', spinRate: 50, netClearance: 0.2 }],
+    ['drive', { from: { x: 1, y: 0.8, z: 8 }, target: { x: -3, z: -7.5 }, speed: 20, spin: 'top', spinRate: 100, netClearance: 0.25 }],
+    ['fast drive', { from: { x: -2, y: 0.8, z: 7 }, target: { x: 3.5, z: -8.4 }, speed: 24, spin: 'top', spinRate: 120, netClearance: 0.25 }],
+    ['volley', { from: { x: 0, y: 1.2, z: 3 }, target: { x: 2, z: -7 }, speed: 16, spin: 'slice', spinRate: 70, netClearance: 0.18 }],
+    ['bandeja', { from: { x: 0, y: 2.3, z: 5 }, target: { x: -3, z: -8 }, speed: 17, spin: 'slice', spinRate: 110, netClearance: 0.25 }],
+    ['smash', { from: { x: 1, y: 2.4, z: 3 }, target: { x: -2, z: -6.3 }, speed: 30, spin: 'top', spinRate: 30, netClearance: 0.1 }],
+    ['hard smash', { from: { x: -1, y: 2.4, z: 4 }, target: { x: 2.5, z: -6.8 }, speed: 38, spin: 'top', spinRate: 30, netClearance: 0.1 }],
+    ['lob', { from: { x: 2, y: 0.8, z: 8 }, target: { x: -2, z: -8.6 }, speed: 12, spin: 'top', spinRate: 40, lob: true, lobAngle: 1.0 }],
+  ];
+  for (const [name, spec] of shots) {
+    it(`follows a ${name} through its bounce on the floor and off the glass`, () => {
+      const start = solveShot(spec);
+      const floorSoon = drift(start, 0.2, 1);
+      const floorLate = drift(start, 0.45, 1);
+      const glassSoon = drift(start, 0.2, 2);
+      expect(floorSoon).not.toBeNull();
+      expect(floorSoon!).toBeLessThan(0.25);
+      if (floorLate !== null) expect(floorLate).toBeLessThan(0.5);
+      if (glassSoon !== null) expect(glassSoon).toBeLessThan(0.45);
+    });
+  }
 });

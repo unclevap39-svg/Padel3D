@@ -97,15 +97,25 @@ export class BallView {
     this.history.length = 0;
   }
 
-  update(b: Readonly<BallState>, rot: { x: number; y: number; z: number; w: number }, camera: THREE.Camera): void {
+  /** `viewHeight` is the height of the picture in CSS pixels: far away, the ball is kept readable. */
+  update(b: Readonly<BallState>, rot: { x: number; y: number; z: number; w: number }, camera: THREE.PerspectiveCamera, viewHeight = 0): void {
     this.mesh.position.set(b.px, b.py, b.pz);
     this.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+    // On a phone the ball at the far end would be two or three pixels wide: never let it fall
+    // under about six.
+    let grow = 1;
+    if (viewHeight > 0) {
+      const dist = camera.position.distanceTo(this.mesh.position);
+      const pxPerMetre = viewHeight / (2 * dist * Math.tan((camera.fov * Math.PI) / 360));
+      grow = Math.min(3.5, Math.max(1, 6.5 / (pxPerMetre * 2 * BALL_RADIUS * BallView.VISUAL_SCALE)));
+    }
+    this.mesh.scale.setScalar(grow);
 
     const h = Math.max(0, b.py - BALL_RADIUS);
-    const size = 0.16 + h * 0.1;
+    const size = (0.16 + h * 0.1) * Math.sqrt(grow);
     this.shadow.position.set(b.px, 0.006, b.pz);
     this.shadow.scale.setScalar(size);
-    (this.shadow.material as THREE.MeshBasicMaterial).opacity = 0.55 / (1 + h * 0.9);
+    (this.shadow.material as THREE.MeshBasicMaterial).opacity = Math.max(0.3, 0.55 / (1 + h * 0.9));
     // No floor shadow once the ball is outside the enclosure.
     this.shadow.visible = Math.abs(b.px) < 5 && Math.abs(b.pz) < 10;
 
@@ -120,7 +130,7 @@ export class BallView {
     const side = this.v2;
     const dir = this.v3;
     const p = this.trailPositions;
-    const r = BALL_RADIUS * BallView.VISUAL_SCALE * 0.8;
+    const r = BALL_RADIUS * BallView.VISUAL_SCALE * 0.8 * grow;
     for (let i = 0; i < BallView.TRAIL_POINTS; i++) {
       const cur = hist[Math.min(i, hist.length - 1)];
       const next = hist[Math.min(i + 1, hist.length - 1)];

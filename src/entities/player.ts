@@ -33,6 +33,8 @@ export class Player {
   wishZ = 0;
   /** Point to run to; overrides wish when set. */
   moveTo: { x: number; z: number } | null = null;
+  /** Speed limit while running to `moveTo` under the placement help; null for `maxSpeed`. */
+  runSpeed: number | null = null;
   swing: Swing | null = null;
   mood: Mood = 'play';
   isHuman = false;
@@ -70,7 +72,9 @@ export class Player {
   update(dt: number, now: number): void {
     let wx = this.wishX;
     let wz = this.wishZ;
+    let top = this.maxSpeed;
     if (this.moveTo) {
+      if (this.runSpeed !== null) top = this.runSpeed;
       const dx = this.moveTo.x - this.x;
       const dz = this.moveTo.z - this.z;
       const d = Math.hypot(dx, dz);
@@ -79,7 +83,7 @@ export class Player {
         wz = 0;
       } else {
         // Ease in over the last stretch so the player settles instead of overshooting.
-        const speedWanted = Math.min(1, Math.sqrt((2 * BRAKE * d) / (this.maxSpeed * this.maxSpeed)) * 0.9);
+        const speedWanted = Math.min(1, Math.sqrt((2 * BRAKE * d) / (top * top)) * 0.9);
         wx = (dx / d) * speedWanted;
         wz = (dz / d) * speedWanted;
       }
@@ -89,9 +93,9 @@ export class Player {
       wx /= m;
       wz /= m;
     }
-    // Planted feet while striking: slow right down around contact.
-    let limit = this.maxSpeed;
-    if (this.swing) {
+    // Planted feet while striking: slow right down around contact. A swing at thin air costs nothing.
+    let limit = top;
+    if (this.swing && this.swing.willHit) {
       const toContact = this.swing.contactT - now;
       if (toContact < 0.15 && toContact > -0.2) limit *= 0.35;
       else limit *= 0.75;

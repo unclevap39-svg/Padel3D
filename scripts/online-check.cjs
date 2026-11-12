@@ -47,18 +47,24 @@ const { chromium } = require('playwright');
   // Both sides play by script for a while in real time.
   await host.evaluate(() => { const g = window.__padel; window.__hits = [0, 0, 0, 0]; const orig = g.handleEvents.bind(g); g.handleEvents = (evs) => { for (const e of evs) if (e.kind === 'hit') window.__hits[e.player]++; orig(evs); };
     setInterval(() => { const s = g.sim; if (!s.plans) return; const p = s.players[0]; const plan = s.plans[0];
-      if (s.phase === 'serve_ready' && s.server === p) s.humanShot({ type: 'drive', power: 0.5, angle: s.match.referee.serveSide === 'right' ? -0.4 : 0.4 });
-      else if (s.phase === 'rally' && s.hitterId === 0 && plan && plan.t - s.now < 0.3 && !p.swing) s.humanShot({ type: 'drive', power: 0.5, angle: 0 }); }, 30); });
-  await guest.evaluate(() => { const g = window.__padel; let last = 0;
-    setInterval(() => { const s = g.sim; const me = s.players[0]; const b = s.world.ball;
-      if (s.phase === 'serve_ready' && s.match.referee.server === 0) s.humanShot({ type: 'drive', power: 0.5, angle: s.match.referee.serveSide === 'right' ? -0.4 : 0.4 });
-      if (s.phase === 'rally' && b.pz > 0.5) { const dx = b.px - me.x - 0.5, dz = b.pz - me.z + 0.3, d = Math.hypot(dx, dz); g.controls.move.x = d > 0.3 ? dx / d : 0; g.controls.move.z = d > 0.3 ? dz / d : 0;
-        if (Math.hypot(b.px - me.x, b.pz - me.z) < 1.6 && b.py < 2.2 && s.now - last > 0.5) { s.humanShot({ type: 'drive', power: 0.5, angle: 0 }); last = s.now; } } else { g.controls.move.x = 0; g.controls.move.z = 0; } }, 30); });
+      if (s.phase === 'serve_ready' && s.server === p) s.humanShot({ type: 'drive', power: 0.5, aim: 0 });
+      else if (s.phase === 'rally' && s.hitterId === 0 && plan && plan.t - s.now < 0.3 && !p.swing) s.humanShot({ type: 'drive', power: 0.5, aim: 0 }); }, 30); });
+  // The guest plays with the real controls: hold a shot button, aim with the stick, release.
+  await guest.evaluate(() => { const g = window.__padel; let pressedAt = -1; window.__guest = { presses: 0, maxGauge: 0, aimSeen: 0, landingSeen: 0 };
+    setInterval(() => { const s = g.sim; const c = s.humanCharge(); const w = window.__guest;
+      if (c) w.maxGauge = Math.max(w.maxGauge, c.gauge);
+      if (g.markers.aim.visible) w.aimSeen++;
+      if (g.markers.landing.visible) w.landingSeen++;
+      const serving = s.phase === 'serve_ready' && s.match.referee.server === 0;
+      const incoming = s.phase === 'rally' && g.view.lastHitTeam === 1;
+      if ((serving || incoming) && !c && !s.players[0].swing) { g.controls.onPress('drive'); pressedAt = performance.now(); w.presses++; g.controls.move.x = w.presses % 2 ? 0.7 : -0.7; }
+      if (c && c.held && performance.now() - pressedAt > 450) g.controls.onRelease();
+      if (!c) g.controls.move.x = 0; }, 30); });
   await host.waitForTimeout(25000);
   await guest.screenshot({ path: 'shots/online-guest.png' });
   await host.screenshot({ path: 'shots/online-host.png' });
   const mid = await Promise.all([host.evaluate(() => ({ hits: window.__hits, points: window.__padel.sim.match.scoring.points, games: window.__padel.sim.match.scoring.games, visible: window.__padel.characters.map((c) => c.group.visible) })),
-    guest.evaluate(() => ({ ready: window.__padel.sim.ready, points: window.__padel.sim.match.scoring.points, games: window.__padel.sim.match.scoring.games, hud: document.querySelector('.scoreboard').innerText.replace(/\s+/g, ' ') }))]);
+    guest.evaluate(() => ({ ready: window.__padel.sim.ready, controls: window.__guest, points: window.__padel.sim.match.scoring.points, games: window.__padel.sim.match.scoring.games, hud: document.querySelector('.scoreboard').innerText.replace(/\s+/g, ' ') }))]);
   console.log('after 25 s', JSON.stringify(mid));
   if (how === 'invite') {
     // The guest leaves abruptly: the host must notice and win by forfeit.
@@ -73,7 +79,7 @@ const { chromium } = require('playwright');
   }
   // Finish the match quickly on the host; the guest must end on the same result.
   await host.evaluate(() => { const g = window.__padel; const s = g.sim; let n = 0;
-    while (s.phase !== 'match_over' && n < 3e6) { if (s.phase === 'serve_ready') for (const id of [0, 2]) if (s.server === s.players[id]) s.shot(id, { type: 'drive', power: 0.5, angle: s.match.referee.serveSide === 'right' ? -0.4 : 0.4 }); s.tick(); n++; if (n % 4 === 0) { const ev = s.drainEvents(); g.net.host.afterFrame(ev, 1 / 30); g.handleEvents(ev); } } });
+    while (s.phase !== 'match_over' && n < 3e6) { if (s.phase === 'serve_ready') for (const id of [0, 2]) if (s.server === s.players[id]) s.shot(id, { type: 'drive', power: 0.5, aim: 0 }); s.tick(); n++; if (n % 4 === 0) { const ev = s.drainEvents(); g.net.host.afterFrame(ev, 1 / 30); g.handleEvents(ev); } } });
   await host.waitForTimeout(4000);
   const end = await Promise.all([host, guest].map((p) => p.evaluate(() => ({ screen: window.__padel.menu.current, text: (document.querySelector('.menu .panel') || { innerText: '' }).innerText.replace(/\s+/g, ' '), won: window.__padel.summary.won }))));
   console.log('end', JSON.stringify(end));

@@ -1,4 +1,5 @@
-import type { ShotIntent, SimEvent, SimPhase } from '../core/types';
+import { MAX_HOLD, gaugeAt } from '../core/shots';
+import type { ShotIntent, ShotType, SimEvent, SimPhase } from '../core/types';
 import { Player } from '../entities/player';
 import type { BallState } from '../physics/ballistics';
 import type { PlayerId, ServeSide } from '../rules/court';
@@ -33,6 +34,12 @@ export class GuestSim {
   private sinceMove = 0;
   private rot = { x: 0, y: 0, z: 0, w: 1 };
   private ball: BallState = { px: 0, py: 1, pz: 0, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0 };
+  /** Latest state received, position and velocity taken at the same instant (for predictions). */
+  private latest: { ball: BallState; t: number } = { ball: { ...this.ball }, t: 0 };
+  /** Local clock, for the gauge of the shot being prepared. */
+  private clock = 0;
+  /** Shot button held or just released on this side; the host keeps the real one. */
+  private charge: { type: ShotType; t0: number; power: number | null; releasedT: number } | null = null;
 
   constructor(link: Link) {
     this.link = link;
@@ -88,11 +95,47 @@ export class GuestSim {
     this.link.send({ k: 'shot', i: intent });
   }
 
+  humanPress(type: ShotType): void {
+    this.link.send({ k: 'p', t: type });
+    this.charge = { type, t0: this.clock, power: null, releasedT: 0 };
+  }
+
+  humanRelease(): void {
+    const c = this.charge;
+    if (!c || c.power !== null) return;
+    this.link.send({ k: 'r' });
+    c.power = gaugeAt(this.clock - c.t0);
+    c.releasedT = this.clock;
+  }
+
+  /** The shot being prepared, as shown on the gauge. The host applies the same rule to the real one. */
+  humanCharge(): { type: ShotType; gauge: number; held: boolean } | null {
+    const c = this.charge;
+    if (!c) return null;
+    return { type: c.type, gauge: c.power ?? gaugeAt(this.clock - c.t0), held: c.power === null };
+  }
+
+  /** Ball state to predict from: position and velocity of the same instant, and that instant. */
+  viewBall(): { ball: BallState; t: number } {
+    return this.latest;
+  }
+
   /** The game loop ticks the simulation; here time is driven by `sync` instead. */
   tick(): void {}
 
   /** Advances the replay by `dt` real seconds: follows the host's clock, blends snapshots, releases events. */
   sync(dt: number): void {
+    this.clock += dt;
+    const c = this.charge;
+    if (c) {
+      if (c.power === null && this.clock - c.t0 > MAX_HOLD) {
+        c.power = 1;
+        c.releasedT = this.clock;
+      }
+      // A released press that led to nothing is forgotten, as on the host.
+      const swinging = this.players[0].swing !== null;
+      if (c.power !== null && !swinging && this.clock - c.releasedT > 1.4) this.charge = null;
+    }
     this.sinceMove += dt;
     if (this.sinceMove >= 1 / SNAPSHOT_RATE) {
       this.sinceMove = 0;
@@ -129,6 +172,17 @@ export class GuestSim {
     B.wy = b.b[7];
     B.wz = -b.b[8];
     this.spinBall(dt);
+    const L = this.latest.ball;
+    L.px = -b.b[0];
+    L.py = b.b[1];
+    L.pz = -b.b[2];
+    L.vx = B.vx;
+    L.vy = B.vy;
+    L.vz = B.vz;
+    L.wx = B.wx;
+    L.wy = B.wy;
+    L.wz = B.wz;
+    this.latest.t = b.t;
 
     for (let id = 0; id < 4; id++) {
       const p = this.players[id];
@@ -151,6 +205,10 @@ export class GuestSim {
       if (sc) this.applyScore(sc);
       if (ev.kind === 'swing') this.players[ev.player].swing = ev.swing;
       if (ev.kind === 'hit') for (const p of this.players) if (p.team !== this.players[ev.player].team) p.splitT = this.now;
+      // My press is used up once my shot has left, or when the point stops.
+      const mine = (ev.kind === 'hit' && ev.player === 0) || (ev.kind === 'swing' && ev.player === 0 && !ev.swing.willHit);
+      if (mine || ev.kind === 'point' || ev.kind === 'fault' || ev.kind === 'let') this.charge = null;
+      if (ev.kind === 'phase' && ev.phase === 'serve_motion' && this.match.referee.server === 0) this.charge = null;
       this.released.push(ev);
     }
   }

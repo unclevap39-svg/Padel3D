@@ -90,13 +90,18 @@ describe('two human players', () => {
     const sim = new Simulation({ difficulty: 'medium', assist: 1, humanControlled: false, humans: [0, 2], seed: 99, match: { setsToWin: 1, tiebreakAt: 0 } });
     sim.startMatch(0);
     const hitsBy = [0, 0, 0, 0];
+    let balls = 0;
     for (let i = 0; i < 2e6 && sim.phase !== 'match_over'; i++) {
-      // Each "human" serves when it is their turn and swings when the ball is theirs.
+      // Each "human" serves when it is their turn and swings when the ball is theirs. With the
+      // aim help at its maximum a safe shot never misses, so now and then they overhit one.
       for (const id of [0, 2] as const) {
         const p = sim.players[id];
-        if (sim.phase === 'serve_ready' && sim.server === p) sim.shot(id, { type: 'drive', power: 0.5, angle: sim.match.referee.serveSide === 'right' ? -0.4 : 0.4 });
+        if (sim.phase === 'serve_ready' && sim.server === p && !sim.chargeOf(id)) sim.shot(id, { type: 'drive', power: 0.5, aim: 0 });
         const plan = sim.plans[id];
-        if (sim.phase === 'rally' && sim.hitterId === id && plan && plan.t - sim.now < 0.3 && !p.swing) sim.shot(id, { type: 'drive', power: 0.5, angle: 0 });
+        if (sim.phase === 'rally' && sim.hitterId === id && plan && plan.t - sim.now < 0.3 && !p.swing && !sim.chargeOf(id)) {
+          balls++;
+          sim.shot(id, { type: 'drive', power: balls % 4 === 0 ? 1 : 0.5, aim: ((balls % 5) - 2) / 2 });
+        }
       }
       sim.tick();
       for (const e of sim.drainEvents()) if (e.kind === 'hit') hitsBy[e.player]++;

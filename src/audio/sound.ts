@@ -119,6 +119,12 @@ export class Sound {
     this.burst({ type: 'bandpass', freq: 1900, q: 1.2, gain: 0.5 * v, decay: 0.05 });
   }
 
+  /** Racket through the air: a swing that met nothing. */
+  whoosh(): void {
+    if (!this.ready) return;
+    this.burst({ type: 'bandpass', freq: 900, q: 0.7, gain: 0.22, attack: 0.05, decay: 0.2 });
+  }
+
   /** Bounce on a surface; `speed` in m/s scales the loudness. */
   bounce(surface: 'floor' | 'glass' | 'fence' | 'net' | 'ground', speed: number): void {
     if (!this.ready) return;

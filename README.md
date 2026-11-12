@@ -58,13 +58,21 @@ l'écran d'installation.
 | Action | Geste |
 |---|---|
 | Se déplacer | Pouce gauche : posez-le n'importe où sur la moitié gauche et glissez |
-| Frapper | Trois boutons à droite : FRAPPE (coup normal), LOB, SMASH (balle haute) |
-| Viser | La balle part du côté où pointe le joystick au moment de l'appui ; relâché, droit devant |
-| Servir | Bouton FRAPPE : la balle vise le carré en diagonale (deux essais) |
-| Clavier (ordinateur) | Flèches ou ZQSD, Espace frapper, K lob, L smash |
+| Frapper | Trois boutons à droite : FRAPPE (coup normal), LOB, SMASH (balle haute ; le bouton s'allume quand c'est possible). Appuyez dès que la balle vient vers vous : le joueur y va et frappe au bon moment |
+| Doser | Maintenez le bouton : la jauge monte, la balle part plus fort et plus loin. Zone verte idéale, zone rouge risquée. Relâchez pour figer la puissance |
+| Viser | Bouton enfoncé, le joystick déplace le cercle jaune sur le terrain adverse : la balle ira là. Relâché, elle revient vers le centre |
+| Servir | Maintenez FRAPPE pour doser, visez dans le carré avec le joystick, relâchez (deux essais) |
+| Pause | Bouton en haut à droite, ou Échap |
+| Clavier (ordinateur) | Flèches ou ZQSD, Espace frapper, K lob, L smash (maintenir pour doser) |
 
-L'aide au placement se règle de 0 à 100 % dans les réglages : elle ramène la balle dans le
-terrain et rapproche votre joueur de la balle quand vous lâchez le joystick.
+Repères à l'écran : un cercle blanc de votre côté montre où la balle adverse va rebondir, et
+« Laissez-la » s'affiche quand elle va sortir.
+
+La visée reste toujours dans les lignes : une balle ne sort que si elle est frappée dans la zone
+rouge de la jauge, mal prise (joueur trop loin de la balle) ou, sans aide, visée tout près des
+lignes. L'aide au placement se règle de 0 à 100 % dans les réglages : à 0 % vous vous placez
+seul et vos balles sont moins précises ; plus haut, le joueur court à la balle dès que vous
+appuyez sur un bouton et vos balles restent plus près de l'endroit visé.
 
 ## Déployer gratuitement sur Netlify
 
@@ -117,18 +125,20 @@ Après le premier chargement complet, le jeu fonctionne sans connexion.
 src/
   rules/     Règles du padel en TypeScript pur : terrain, score, arbitre d'un point, match
   physics/   Modèle de vol (traînée, Magnus, rebonds), prédicteur, solveur de coups, monde Rapier
-  core/      Simulation sans rendu (joueurs, service, échanges), boucle de jeu, réglages,
-             profil du joueur (pièces, niveaux, objets, modes de jeu)
+  core/      Simulation sans rendu (joueurs, service, échanges), loi de visée et jauge
+             (shots.ts), boucle de jeu, réglages, profil du joueur (pièces, niveaux, objets,
+             modes de jeu)
   ai/        Interception de la balle, placement en double, choix de coups, 3 niveaux
   entities/  Joueur (logique), animation procédurale, modèle skinné, mannequin de secours, balle
-  render/    Scène, terrain, textures procédurales, caméra, qualité adaptative
+  render/    Scène, terrain, textures procédurales, caméra, repères au sol, qualité adaptative
   input/     Joystick, boutons de frappe, clavier, vibration
   audio/     Sons synthétisés (Web Audio) et annonce vocale du score
   net/       Jeu en ligne : salon, connexion directe, hôte et invité
   ui/        Accueil (modes, en ligne, boutique, vestiaire, profil, réglages), HUD, menus
 server/      Logique du salon en ligne (testable sans réseau)
 netlify/     Fonction serveur du salon
-tests/       Vitest : règles, physique, matchs complets, réseau, salon
+tests/       Vitest : règles, physique, matchs complets, jouabilité (visée, jauge, service),
+             réseau, salon
 tools/       Construction du modèle de joueur et des icônes
 scripts/     Aides de vérification visuelle (captures Playwright)
 ```

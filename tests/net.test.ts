@@ -34,9 +34,9 @@ function onlineMatch(singles: boolean, dropFast: number) {
   for (let frame = 0; frame < 400000 && !(sim.phase === 'match_over' && guest.phase === 'match_over'); frame++) {
     // Host player: serves and swings using the simulation's own plan.
     const p0 = sim.players[0];
-    if (sim.phase === 'serve_ready' && sim.server === p0) sim.shot(0, { type: 'drive', power: 0.5, angle: sim.match.referee.serveSide === 'right' ? -0.4 : 0.4 });
+    if (sim.phase === 'serve_ready' && sim.server === p0) sim.shot(0, { type: 'drive', power: 0.5, aim: 0 });
     const plan = sim.plans[0];
-    if (sim.phase === 'rally' && sim.hitterId === 0 && plan && plan.t - sim.now < 0.3 && !p0.swing) sim.shot(0, { type: 'drive', power: 0.5, angle: 0 });
+    if (sim.phase === 'rally' && sim.hitterId === 0 && plan && plan.t - sim.now < 0.3 && !p0.swing) sim.shot(0, { type: 'drive', power: 0.5, aim: 0 });
     sim.tick();
     sim.tick();
     const events = sim.drainEvents();
@@ -48,14 +48,14 @@ function onlineMatch(singles: boolean, dropFast: number) {
     guest.sync(dt);
     const me = guest.players[0];
     const b = guest.world.ball;
-    if (guest.phase === 'serve_ready' && guest.match.referee.server === 0) guest.humanShot({ type: 'drive', power: 0.5, angle: guest.match.referee.serveSide === 'right' ? -0.4 : 0.4 });
+    if (guest.phase === 'serve_ready' && guest.match.referee.server === 0) guest.humanShot({ type: 'drive', power: 0.5, aim: 0 });
     if (guest.phase === 'rally' && b.pz > 0.5) {
       const dx = b.px - me.x - 0.5;
       const dz = b.pz - me.z + 0.3;
       const d = Math.hypot(dx, dz);
       guest.setHumanMove(d > 0.3 ? dx / d : 0, d > 0.3 ? dz / d : 0);
       if (Math.hypot(b.px - me.x, b.pz - me.z) < 1.6 && b.py < 2.2 && guest.now - lastGuestSwing > 0.5) {
-        guest.humanShot({ type: 'drive', power: 0.5, angle: 0 });
+        guest.humanShot({ type: 'drive', power: 0.5, aim: 0 });
         lastGuestSwing = guest.now;
       }
     } else guest.setHumanMove(0, 0);
@@ -69,6 +69,60 @@ function onlineMatch(singles: boolean, dropFast: number) {
   }
   return { sim, guest, hits, guestKinds, maxErr };
 }
+
+describe('guest controls', () => {
+  it('sends the held button, its release and the stick to the host, which plays the shot', () => {
+    const [hostLink, guestLink] = createLoopback({ dropFast: 0, random: () => 0.5 }) as ReturnType<typeof createLoopback> & Array<{ pump(): void }>;
+    const sim = new Simulation({ difficulty: 'medium', assist: 0.5, humanControlled: false, humans: [0, 2], singles: true, seed: 5 });
+    const host = new HostSession(sim, hostLink);
+    const guest = new GuestSim(guestLink);
+    hostLink.onMessage = (m) => host.receive(m as GuestMsg);
+    guestLink.onMessage = (m) => guest.receive(m as HostMsg);
+    sim.startMatch(2); // the guest serves
+    host.sendStart();
+    const dt = TICK_DT * 2;
+    let pressedAt = -1;
+    let released = false;
+    let seen: number | null = null;
+    let power: number | undefined;
+    let landedX: number | null = null;
+    for (let frame = 0; frame < 2000 && landedX === null; frame++) {
+      sim.tick();
+      sim.tick();
+      const events = sim.drainEvents();
+      for (const e of events) {
+        if (e.kind === 'hit' && e.player === 2) power = e.power;
+        if (e.kind === 'bounce' && power !== undefined && e.surface === 'floor') landedX = e.x;
+      }
+      host.afterFrame(events, dt);
+      (guestLink as unknown as { pump(): void }).pump();
+      guest.sync(dt);
+      guest.drainEvents();
+      if (guest.phase === 'serve_ready' && guest.match.referee.server === 0 && pressedAt < 0) {
+        guest.humanPress('drive');
+        pressedAt = frame;
+      }
+      // Stick fully to the guest's right while the button is held for half a second.
+      if (pressedAt >= 0) guest.setHumanMove(1, 0);
+      if (pressedAt >= 0 && !released && frame - pressedAt >= 30) {
+        seen = sim.chargeOf(2)?.gauge ?? null;
+        // The guest's own gauge shows the same level as the host's, within the link delay.
+        expect(guest.humanCharge()?.gauge).toBeCloseTo(seen ?? 0, 0);
+        guest.humanRelease();
+        released = true;
+      }
+      (hostLink as unknown as { pump(): void }).pump();
+    }
+    expect(seen).toBeGreaterThan(0.35);
+    expect(power).toBeGreaterThan(0.35);
+    expect(power).toBeLessThan(0.7);
+    // The guest plays from the far end: its right is the host's -x. Serving from the right-hand
+    // side into the diagonal box (host +x), the stick to the right moves the ball towards the centre line.
+    expect(landedX).not.toBeNull();
+    expect(landedX!).toBeGreaterThan(0);
+    expect(landedX!).toBeLessThan(2.2);
+  });
+});
 
 describe('online match over a loopback link', () => {
   it('mirrors events and scores for the guest', () => {

@@ -3,14 +3,18 @@ import { Sound } from '../audio/sound';
 import { BallView } from '../entities/ball';
 import { CharacterView, type Outfit } from '../entities/character';
 import { SkinnedBody, loadPlayerModel } from '../entities/skinned';
+import { type Intercept, bestIntercept } from '../ai/intercept';
 import { TouchControls, vibrate } from '../input/touch';
 import { GuestSim } from '../net/guest';
 import { HostSession } from '../net/host';
 import { Lobby, type MatchInfo } from '../net/lobby';
 import type { GuestMsg, HelloMsg, HostMsg, Link, NetMsg } from '../net/protocol';
+import { type Prediction, predict } from '../physics/ballistics';
 import { TICK_DT } from '../physics/world';
+import { inServiceBox, serviceBoxXSign, teamOf } from '../rules/court';
 import { AdaptiveQuality } from '../render/adaptive';
 import { CameraRig } from '../render/camera';
+import { CourtMarkers } from '../render/markers';
 import { type QualityTier, Stage } from '../render/stage';
 import { Home, type HomeTab } from '../ui/home';
 import { Hud } from '../ui/hud';
@@ -28,21 +32,34 @@ import {
   modeById,
 } from './profile';
 import { type Settings, saveSettings } from './settings';
+import { type ShotClass, OVER_START, aimTarget, classify, humanSigma, overOf } from './shots';
 import { Simulation } from './sim';
-import type { Difficulty, SimEvent } from './types';
+import type { Difficulty, ShotType, SimEvent } from './types';
 
-const REASONS: Record<string, string> = {
-  double_fault: 'Double faute',
-  second_bounce: 'Point gagnant',
-  ace: 'Ace',
-  net: 'Dans le filet',
-  wall_direct: 'Vitre directe',
-  fence_direct: 'Grillage direct',
-  out: 'Dehors',
-  out_after_bounce: 'Balle sortie du terrain',
-  volley_on_serve: 'Volée interdite sur le service',
-  double_hit: 'Double touche',
+/** How a ball was lost: said of the side that made the mistake. */
+const ERRORS: Record<string, string> = {
+  double_fault: 'double faute',
+  net: 'dans le filet',
+  wall_direct: 'dans la vitre avant le rebond',
+  fence_direct: 'dans le grillage avant le rebond',
+  out: 'dehors',
+  volley_on_serve: 'volée interdite sur le service',
+  double_hit: 'double touche',
 };
+
+/** Sub-title of a point: what happened, and who did it. */
+function pointReason(reason: string, mine: boolean, lastHitBy: number, overhit: boolean): string {
+  if (reason === 'ace') return mine ? 'Ace !' : 'Ace adverse';
+  if (reason === 'second_bounce' || reason === 'out_after_bounce') {
+    if (!mine) return 'Balle non renvoyée';
+    return lastHitBy === 1 ? 'Coup gagnant de votre partenaire' : 'Coup gagnant !';
+  }
+  const how = ERRORS[reason] ?? '';
+  if (mine) return `Faute adverse : ${how}`;
+  if (reason === 'double_fault') return 'Double faute';
+  if (lastHitBy === 1) return `Faute de votre partenaire : ${how}`;
+  return overhit ? `Trop fort : ${how}` : `Votre balle : ${how}`;
+}
 
 const FAULTS: Record<string, string> = {
   serve_net: 'Dans le filet',
@@ -84,6 +101,28 @@ export class Game {
   private net: { info: MatchInfo; link: Link; host: HostSession | null; ended: boolean } | null = null;
   private settings: Settings;
   private ball = new BallView();
+  private markers = new CourtMarkers();
+  /**
+   * What the view works out for itself about the ball in play (the online guest has no access
+   * to the host's plans): who struck it last, where it will bounce, where the player would
+   * meet it and whether it can be smashed.
+   */
+  private view = {
+    lastHitTeam: -1,
+    lastHitBy: -1,
+    lastPower: 0,
+    bounces: 0,
+    serveFlight: false,
+    recalcAt: 0,
+    pred: null as Prediction | null,
+    ic: null as Intercept | null,
+    smashReady: false,
+    goingOut: false,
+    leaveTold: false,
+    landing: null as { x: number; z: number; t: number } | null,
+    lastGauge: 0,
+    lastType: 'drive' as ShotType,
+  };
   private characters: CharacterView[] = [];
   private camera = new CameraRig();
   private adaptive: AdaptiveQuality;
@@ -97,6 +136,7 @@ export class Game {
   private pendingAnnounce: { at: number; text: string } | null = null;
   private opts: GameOptions;
   private ballPos = { x: 0, y: 1, z: 0 };
+  private tmp = new THREE.Vector3();
   private mode: ModeId = 'quick';
   /** Assist level imposed by the current mode, if any. */
   private modeAssist: number | null = null;
@@ -118,6 +158,7 @@ export class Game {
     this.adaptive = new AdaptiveQuality(this.stage, tier);
     this.adaptive.enabled = !opts.forceTier && this.settings.quality === 'auto';
     this.stage.scene.add(this.ball.group);
+    this.stage.scene.add(this.markers.group);
     OUTFITS.forEach((o, i) => {
       const c = new CharacterView(o, i === 0);
       this.characters.push(c);
@@ -168,15 +209,16 @@ export class Game {
       canInstallNatively: opts.canInstallNatively,
     });
     this.hud.onPause = () => this.pause();
-    this.controls.onShot = (intent) => {
+    this.controls.onPress = (type) => {
       this.sound.unlock();
-      const ref = this.sim.match.referee;
-      // Serving with the stick released: aim at the middle of the diagonal service box.
-      if (this.sim.phase === 'serve_ready' && ref.server === 0 && Math.abs(intent.angle ?? 0) < 0.05) {
-        intent = { ...intent, type: 'drive', angle: ref.serveSide === 'right' ? -0.38 : 0.38 };
-      }
-      this.sim.humanShot(intent);
+      this.sim.humanPress(type);
     };
+    this.controls.onRelease = () => this.sim.humanRelease();
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || e.repeat || !this.playing) return;
+      if (this.menu.current === 'pause') this.resume();
+      else if (this.menu.current === null) this.pause();
+    });
 
     // Home screen: the four players stand on court, the camera frames your character.
     this.sim = this.makeSim(false);
@@ -573,6 +615,7 @@ export class Game {
       const events = this.sim.drainEvents();
       this.net?.host?.afterFrame(events, dt);
       this.handleEvents(events);
+      this.updateAimView(dt);
 
       const b = this.sim.world.ball;
       this.ballPos.x = b.px;
@@ -584,7 +627,7 @@ export class Game {
         this.characters[i].group.visible = p.active;
         if (p.active) this.characters[i].update(simDt, p, this.sim.now, this.ballPos, live);
       }
-      this.ball.update(b, this.sim.world.ballRotation(), this.stage.camera);
+      this.ball.update(b, this.sim.world.ballRotation(), this.stage.camera, this.opts.canvas.clientHeight);
       this.camera.update(this.stage.camera, dt, this.sim.players[0], this.ballPos);
       if (this.debugCam) {
         const cam = this.stage.camera;
@@ -608,11 +651,127 @@ export class Game {
     }
   }
 
+  /**
+   * Everything the player needs to see to aim and time a shot: the marker where the shot will
+   * land, the marker where the incoming ball will bounce, the power gauge, the state of the
+   * buttons. Worked out from the ball alone, so it is the same for the host and the guest.
+   */
+  private updateAimView(dt: number): void {
+    const sim = this.sim;
+    const v = this.view;
+    const p0 = sim.players[0];
+    const ref = sim.match.referee;
+    const live = this.playing;
+    const rally = live && sim.phase === 'rally';
+
+    // Where is the opponents' ball going, and where would I meet it?
+    const incoming = rally && v.lastHitTeam === 1 && v.bounces < 2;
+    const charge = live ? sim.humanCharge() : null;
+    if (!incoming) {
+      v.pred = null;
+      v.ic = null;
+      v.smashReady = false;
+      v.goingOut = false;
+      v.landing = null;
+    } else if (this.clock >= v.recalcAt) {
+      v.recalcAt = this.clock + 0.1;
+      const { ball, t } = sim.viewBall();
+      const pred = predict(ball, 3, v.bounces);
+      v.pred = pred;
+      const o = { now: sim.now, predT0: t, mustBounce: v.serveFlight, reaction: 0, minLead: 0.04 };
+      v.ic = bestIntercept(p0, pred, { ...o, wantOverhead: charge?.type === 'smash' });
+      const high = charge?.type === 'smash' ? v.ic : bestIntercept(p0, pred, { ...o, wantOverhead: true });
+      v.smashReady = !!high?.overhead;
+      const fb = pred.firstBounce;
+      let out = false;
+      if (v.bounces === 0) {
+        out = pred.net || pred.wallBeforeBounce || (pred.out && !fb);
+        if (fb && fb.z < 0) out = true;
+        if (fb && v.serveFlight && !inServiceBox(fb.x, fb.z, 0, serviceBoxXSign(1, ref.serveSide))) out = true;
+      }
+      v.goingOut = out;
+      v.landing = v.bounces === 0 && fb && fb.z > 0 ? { x: fb.x, z: fb.z, t: t + fb.t } : null;
+      if (out && !v.leaveTold) {
+        v.leaveTold = true;
+        this.hud.hint('Laissez-la : elle sort', 1.2);
+      }
+    }
+    const land = v.landing && sim.now < v.landing.t + 0.1 ? v.landing : null;
+    this.markers.setLanding(land, v.goingOut);
+
+    // Where is my own shot aimed?
+    const serving = live && ref.server === 0 && (sim.phase === 'serve_ready' || sim.phase === 'serve_motion');
+    const swing = p0.swing && p0.swing.willHit && sim.now < p0.swing.contactT ? p0.swing : null;
+    if (charge) {
+      v.lastGauge = charge.gauge;
+      v.lastType = charge.type;
+    } else if (sim.phase === 'serve_ready') v.lastGauge = 0;
+    let target: { x: number; z: number } | null = null;
+    let gauge: number | null = null;
+    const assist = sim instanceof Simulation ? sim.assistOf(p0) : this.settings.assist;
+    if (serving || (rally && (charge || swing))) {
+      const g = charge ? charge.gauge : v.lastGauge;
+      gauge = charge || swing ? g : null;
+      const type = charge?.type ?? v.lastType;
+      let cls: ShotClass;
+      let from = { x: p0.x + 0.5, z: p0.z };
+      if (serving) cls = 'serve';
+      else if (swing) {
+        cls = classify(type, swing.stroke, swing.contact.y, false);
+        from = swing.contact;
+      } else if (v.ic) {
+        const stroke = v.ic.overhead ? (type === 'smash' ? 'smash' : 'bandeja') : v.ic.volley ? 'volley_fh' : 'forehand';
+        cls = classify(type, stroke, v.ic.ball.y, false);
+        from = v.ic.ball;
+      } else cls = type === 'lob' ? 'lob' : 'drive';
+      target = aimTarget({
+        cls,
+        g,
+        aim: this.controls.move.x,
+        from,
+        rightX: 1,
+        fwd: -1,
+        assist,
+        sigma: humanSigma(assist, 1, serving),
+        serveBox: serving ? serviceBoxXSign(0, ref.serveSide) : undefined,
+      });
+      this.markers.setAim(target, overOf(g));
+    } else this.markers.setAim(null);
+    this.markers.update(dt);
+
+    // Gauge: around the button, and above the player where the thumb does not hide it.
+    this.controls.setGauge(gauge !== null ? (charge?.type ?? v.lastType) : null, gauge ?? 0);
+    if (gauge !== null) {
+      const cam = this.stage.camera;
+      const pt = this.tmp.set(p0.x, 2.15, p0.z).project(cam);
+      const w = this.opts.canvas.clientWidth;
+      const h = this.opts.canvas.clientHeight;
+      this.hud.setGauge(gauge, (pt.x * 0.5 + 0.5) * w, (-pt.y * 0.5 + 0.5) * h);
+    } else this.hud.setGauge(null);
+    this.controls.setSmashReady(v.smashReady);
+    this.controls.setIdle(!(sim.phase === 'rally' || sim.phase === 'serve_ready' || sim.phase === 'serve_motion'));
+  }
+
   private handleEvents(events: SimEvent[]): void {
     const live = this.playing;
+    const v = this.view;
     for (const e of events) {
       switch (e.kind) {
+        case 'swing':
+          // A swing at thin air: the ball was out of reach.
+          if (live && e.player === 0 && !e.swing.willHit && e.swing.stroke !== 'serve') {
+            this.sound.whoosh();
+            this.hud.hint('Trop loin de la balle', 1.1);
+          }
+          break;
         case 'hit':
+          v.lastHitTeam = teamOf(e.player);
+          v.lastHitBy = e.player;
+          v.lastPower = e.power ?? 0;
+          v.bounces = 0;
+          v.serveFlight = e.stroke === 'serve';
+          v.recalcAt = 0;
+          v.leaveTold = false;
           this.sound.hit(Math.min(1, e.speedKmh / 120));
           if (live) {
             this.hud.setSpeed(e.speedKmh);
@@ -620,13 +779,16 @@ export class Game {
           }
           break;
         case 'bounce':
+          if (e.surface === 'floor') v.bounces++;
+          v.recalcAt = 0;
           this.sound.bounce(e.surface, e.speed);
           break;
         case 'serve_ready':
+          v.lastHitTeam = -1;
           if (!live) break;
           this.hud.updateScore(this.sim.match.scoring, e.server);
           if (e.server === 0) {
-            this.hud.setPrompt(e.serveNumber === 2 ? 'Second service — appuyez sur FRAPPE' : 'Appuyez sur FRAPPE pour servir');
+            this.hud.setPrompt(`${e.serveNumber === 2 ? 'Second service' : 'Service'} : maintenez FRAPPE pour doser, relâchez pour servir`);
           } else this.hud.setPrompt(null);
           break;
         case 'phase':
@@ -637,18 +799,25 @@ export class Game {
           }
           break;
         case 'fault':
+          v.lastHitTeam = -1;
           if (!live) break;
           this.hud.flash('Faute', FAULTS[e.reason] ?? '', 1.4);
           this.sound.say('Faute');
           break;
         case 'let':
+          v.lastHitTeam = -1;
           if (!live) break;
           this.hud.flash('Let', 'Service à rejouer', 1.4);
           this.sound.say('Let');
           break;
         case 'point': {
-          this.sound.applause(e.winnerShot ? 0.9 : 0.45);
-          if (e.winnerShot) this.slowUntil = this.clock + 1.3;
+          const lastHitBy = v.lastHitBy;
+          const overhit = v.lastPower > OVER_START;
+          v.lastHitTeam = -1;
+          // The crowd and the slow motion celebrate your pair's winners, not the opponents'.
+          const ours = e.winner === 0 || !live;
+          this.sound.applause(e.winnerShot && ours ? 0.9 : 0.4);
+          if (e.winnerShot && ours) this.slowUntil = this.clock + 1.3;
           if (!live) break;
           if (e.winner === 0) {
             this.summary.pointsWon++;
@@ -662,7 +831,7 @@ export class Game {
           if (e.match) main = mine ? 'Jeu, set et match !' : 'Match perdu';
           else if (e.set) main = mine ? 'Set gagné !' : 'Set perdu';
           else if (e.game) main = mine ? 'Jeu pour vous' : 'Jeu adverse';
-          this.hud.flash(main, REASONS[e.reason] ?? '', 2.2);
+          this.hud.flash(main, pointReason(e.reason, mine, lastHitBy, overhit), 2.2);
           this.hud.updateScore(s, this.sim.match.referee.server);
           if (mine && this.settings.haptics) vibrate(40);
           let text = s.announcement();

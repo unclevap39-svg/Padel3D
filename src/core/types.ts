@@ -7,11 +7,11 @@ export type ShotType = 'drive' | 'lob' | 'smash';
 /** What a player wants to do with the ball. */
 export interface ShotIntent {
   type: ShotType;
-  /** 0..1 */
+  /** Gauge level, 0..1. */
   power: number;
-  /** Aim angle from straight ahead, radians, positive towards screen right (+x for team 0). */
-  angle?: number;
-  /** Explicit landing point (used by the AI); overrides `angle`. */
+  /** Aim across the court, -1..1, positive towards the player's right (screen right from behind). */
+  aim?: number;
+  /** Explicit landing point (used by the AI); overrides `aim`. */
   target?: { x: number; z: number };
 }
 
@@ -60,7 +60,7 @@ export type SimPhase = 'idle' | 'positioning' | 'serve_ready' | 'serve_motion' |
 export type SimEvent =
   | { kind: 'phase'; phase: SimPhase }
   | { kind: 'swing'; player: PlayerId; swing: Swing }
-  | { kind: 'hit'; player: PlayerId; stroke: StrokeKind; speedKmh: number; x: number; y: number; z: number }
+  | { kind: 'hit'; player: PlayerId; stroke: StrokeKind; speedKmh: number; x: number; y: number; z: number; power?: number }
   | { kind: 'bounce'; surface: 'floor' | 'glass' | 'fence' | 'net' | 'ground'; x: number; y: number; z: number; speed: number }
   | { kind: 'fault'; serveNumber: 1 | 2; reason: string }
   | { kind: 'let' }

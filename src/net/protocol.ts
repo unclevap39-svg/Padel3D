@@ -2,7 +2,7 @@
  * Messages exchanged during an online match. The host runs the real simulation and is the only
  * authority; the guest sends its controls and draws what the host reports.
  */
-import type { ShotIntent, SimEvent, SimPhase, StrokeKind } from '../core/types';
+import type { ShotIntent, ShotType, SimEvent, SimPhase, StrokeKind } from '../core/types';
 import type { PlayerId, Team } from '../rules/court';
 import type { ScoreSnapshot } from '../rules/scoring';
 
@@ -39,7 +39,17 @@ export interface HelloMsg {
 }
 
 export type HostMsg = Snapshot | EventMsg | HelloMsg | { k: 'start'; singles: boolean; sc: ScoreSnapshot & { serveNumber: 1 | 2 } } | { k: 'bye' };
-export type GuestMsg = { k: 'm'; x: number; z: number } | { k: 'shot'; i: ShotIntent } | HelloMsg | { k: 'bye' };
+/**
+ * From the guest: `m` is the stick (it moves the player and aims the shot), `p` a shot button
+ * going down, `r` its release, `shot` a complete press with a set power (scripts).
+ */
+export type GuestMsg =
+  | { k: 'm'; x: number; z: number }
+  | { k: 'p'; t: ShotType }
+  | { k: 'r' }
+  | { k: 'shot'; i: ShotIntent }
+  | HelloMsg
+  | { k: 'bye' };
 export type NetMsg = HostMsg | GuestMsg;
 
 /** Two-way connection to the other player. `fast` messages may be dropped or arrive out of order. */

@@ -16,7 +16,7 @@ const { chromium } = require('playwright');
   await page.waitForTimeout(800);
   const started = await page.evaluate(() => { const g = window.__padel; return { phase: g.sim.phase, tiebreak: g.sim.match.scoring.tiebreak, homeHidden: document.querySelector('.home').classList.contains('hidden') }; });
   // Fast-forward: the "human" only serves, so the opponents win the tie-break.
-  await page.evaluate(() => { const g = window.__padel; let n = 0; while (g.sim.phase !== 'match_over' && n < 2e6) { if (g.sim.phase === 'serve_ready' && g.sim.server.id === 0) g.sim.humanShot({ type: 'drive', power: 0.5, angle: 0 }); g.sim.tick(); n++; if (n % 500 === 0) g.handleEvents(g.sim.drainEvents()); } });
+  await page.evaluate(() => { const g = window.__padel; let n = 0; while (g.sim.phase !== 'match_over' && n < 2e6) { if (g.sim.phase === 'serve_ready' && g.sim.server.id === 0) g.sim.humanShot({ type: 'drive', power: 0.5, aim: 0 }); g.sim.tick(); n++; if (n % 500 === 0) g.handleEvents(g.sim.drainEvents()); } });
   await page.waitForTimeout(1500);
   const end = await page.evaluate(() => ({ screen: window.__padel.menu.current, text: document.querySelector('.menu .panel').innerText.replace(/\s+/g, ' '), coins: window.__padel.profile.coins, stats: window.__padel.profile.stats.matches }));
   await page.screenshot({ path: 'shots/flow-end.png' });

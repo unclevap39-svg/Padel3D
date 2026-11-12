@@ -15,7 +15,7 @@ const { chromium, devices } = require('playwright');
       // Fast-forward a whole match with nobody at the controls, then show the result screen.
       const res = await page.evaluate(() => {
         const g = window.__padel; g.menu.show('main'); g.startMatch('quick', 2);
-        let n = 0; while (g.sim.phase !== 'match_over' && n < 3e6) { if (g.sim.phase === 'serve_ready' && g.sim.server.id === 0) g.sim.humanShot({ type: 'drive', power: 0.5, angle: 0 }); g.sim.tick(); n++; if (n % 2000 === 0) g.sim.drainEvents(); }
+        let n = 0; while (g.sim.phase !== 'match_over' && n < 3e6) { if (g.sim.phase === 'serve_ready' && g.sim.server.id === 0) g.sim.humanShot({ type: 'drive', power: 0.5, aim: 0 }); g.sim.tick(); n++; if (n % 2000 === 0) g.sim.drainEvents(); }
         return { ticks: n, sets: g.sim.match.scoring.completedSets, winner: g.sim.match.scoring.matchWinner };
       });
       console.log('match', JSON.stringify(res));

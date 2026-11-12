@@ -21,6 +21,10 @@ export interface Intercept {
   overhead: boolean;
   afterWall: boolean;
   score: number;
+  /** Metres to spare when the plan was made: near zero means the player is at full stretch. */
+  slack: number;
+  /** Speed of the ball when it is met, m/s. */
+  speed: number;
 }
 
 export interface InterceptOptions {
@@ -32,6 +36,10 @@ export interface InterceptOptions {
   reaction: number;
   /** Earliest contact, seconds from now. */
   minLead: number;
+  /** The player asked for a smash: take the ball overhead whenever one is within reach. */
+  wantOverhead?: boolean;
+  /** Seconds needed to read a rebound: the ball cannot be played sooner after it leaves a wall. */
+  wallRead?: number;
 }
 
 /** Position from which `p` would strike a ball at sample `s`, forehand or backhand. */
@@ -53,10 +61,19 @@ function stanceFor(p: Player, s: PredSample, backhand: boolean, overhead: boolea
  */
 export function bestIntercept(p: Player, pred: Prediction, o: InterceptOptions): Intercept | null {
   let best: Intercept | null = null;
+  let walls = 0;
+  let wallT = -Infinity;
   for (const s of pred.samples) {
+    if (s.walls > walls) {
+      walls = s.walls;
+      wallT = s.t;
+    }
     const t = o.predT0 + s.t;
     const lead = t - o.now;
     if (lead < o.minLead) continue;
+    // A ball coming off the glass has to be read before it can be played: a hard, flat shot
+    // that rebounds fast gets away from a defender standing right at the wall.
+    if (o.wallRead && s.t - wallT < o.wallRead) continue;
     if (s.z * p.sideSign < 0.2) continue; // not on our side yet
     if (s.bounces >= 2) continue;
     if (o.mustBounce && s.bounces < 1) continue;
@@ -82,6 +99,7 @@ export function bestIntercept(p: Player, pred: Prediction, o: InterceptOptions):
     if (overhead) {
       // An overhead is an attacking chance near the net, awkward from the back.
       score += netDist < 6.5 ? 0.9 - Math.abs(s.y - 2.35) : -0.8;
+      if (o.wantOverhead) score += 4 - Math.abs(s.y - 2.4);
     } else {
       score -= Math.abs(s.y - 1.0) * 1.3;
     }
@@ -101,6 +119,8 @@ export function bestIntercept(p: Player, pred: Prediction, o: InterceptOptions):
         overhead,
         afterWall: s.walls > 0,
         score,
+        slack,
+        speed: Math.hypot(s.vx, s.vy, s.vz),
       };
     }
   }
@@ -114,7 +134,7 @@ export function bestIntercept(p: Player, pred: Prediction, o: InterceptOptions):
 export function swingContact(
   p: Player,
   pred: Prediction,
-  o: { now: number; predT0: number; mustBounce: boolean; minLead: number; window: number },
+  o: { now: number; predT0: number; mustBounce: boolean; minLead: number; window: number; wantOverhead?: boolean },
 ): Intercept | null {
   let best: Intercept | null = null;
   let bestCost = Infinity;
@@ -134,11 +154,13 @@ export function swingContact(
     const d = Math.hypot(s.x - px, s.z - pz);
     if (d > REACH) continue;
     // Prefer the ball at a comfortable distance and height, and do not wait needlessly.
-    const cost = Math.abs(d - HIT_OFFSET) + Math.abs(s.y - 1.0) * 0.25 + lead * 0.6;
+    const overhead = s.y > 1.95;
+    let cost = Math.abs(d - HIT_OFFSET) + Math.abs(s.y - 1.0) * 0.25 + lead * 0.6;
+    // A smash is taken high: any overhead contact beats waiting for the ball to drop.
+    if (o.wantOverhead && overhead) cost = Math.abs(s.y - 2.4) * 0.3 - 4;
     if (cost < bestCost) {
       bestCost = cost;
       const side = (s.x - px) * p.rightX; // > 0: ball on the racket side
-      const overhead = s.y > 1.95;
       best = {
         t,
         ball: { x: s.x, y: s.y, z: s.z },
@@ -148,6 +170,8 @@ export function swingContact(
         overhead,
         afterWall: s.walls > 0,
         score: -cost,
+        slack: REACH - d,
+        speed: Math.hypot(s.vx, s.vy, s.vz),
       };
     }
   }
