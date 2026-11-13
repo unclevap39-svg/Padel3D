@@ -19,7 +19,7 @@ const { chromium } = require('playwright');
   };
   const A = await open('A', '?q=low&noinstall');
   await A.evaluate(() => { window.__padel.profile.name = 'Alice'; });
-  await A.click('.home-nav [data-tab=online]');
+  await A.click('.home .onglet[data-tab=online]');
   let B;
   if (how === 'invite') {
     await A.click('[data-invite="1"]');
@@ -31,7 +31,7 @@ const { chromium } = require('playwright');
   } else {
     B = await open('B', '?q=low&noinstall');
     await B.evaluate(() => { window.__padel.profile.name = 'Bruno'; });
-    await B.click('.home-nav [data-tab=online]');
+    await B.click('.home .onglet[data-tab=online]');
     await A.screenshot({ path: 'shots/online-lobby.png' });
     await A.click(how === 'classic' ? '[data-queue="c2"]' : '[data-queue="r2"]');
     await A.waitForTimeout(1200);

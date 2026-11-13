@@ -77,7 +77,7 @@ export default defineConfig({
       },
       workbox: {
         // Everything is precached on first visit so the game runs with no connection afterwards.
-        globPatterns: ['**/*.{js,css,html,png,webp,glb,wasm,json}'],
+        globPatterns: ['**/*.{js,css,html,png,webp,glb,wasm,json,woff2}'],
         // Three.js also emits its own copies of the Draco decoder; the game uses public/draco.
         globIgnores: ['assets/draco_*'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,

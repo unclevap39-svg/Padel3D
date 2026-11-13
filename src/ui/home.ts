@@ -18,7 +18,8 @@ import type { Difficulty } from '../core/types';
 import type { LeaderRow, LobbyState, OnlineProfile, QueueMode } from '../net/lobby';
 import { isStandalone } from './menu';
 
-export type HomeTab = 'play' | 'online' | 'shop' | 'locker' | 'profile' | 'settings';
+/** Screens of the home. `modes` is the mode picker opened from the lobby. */
+export type HomeTab = 'play' | 'modes' | 'online' | 'shop' | 'locker' | 'profile' | 'settings';
 
 export interface HomeCallbacks {
   onPlay: (mode: ModeId) => void;
@@ -26,6 +27,8 @@ export interface HomeCallbacks {
   /** Show these items on the hero character and the court (equipped or being tried on). */
   onLoadout: (loadout: Record<ItemKind, string>) => void;
   onTab: (tab: HomeTab) => void;
+  /** Doubles or singles chosen: the partner joins or leaves the stage. */
+  onFormat: (format: 'double' | 'single') => void;
   onHelp: () => void;
   onInstall: () => void;
   /** Online lobby actions. */
@@ -36,32 +39,34 @@ export interface HomeCallbacks {
   onBoard: (kind: '1' | '2') => Promise<LeaderRow[] | null>;
 }
 
-const ICONS = {
-  coin: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#f6c93a"/><circle cx="10" cy="10" r="6.2" fill="none" stroke="#b8860b" stroke-width="1.4"/><path d="M10 6v8M7.6 8.2h3.6a1.4 1.4 0 0 1 0 2.8H8.6a1.4 1.4 0 0 0 0 2.8h3.8" fill="none" stroke="#8a6508" stroke-width="1.3" stroke-linecap="round"/></svg>',
-  play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>',
-  shop: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.5a1.5 1.5 0 0 1-1.5 1.5H7.7a1.5 1.5 0 0 1-1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 8V6.5a3.5 3.5 0 0 1 7 0V8" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
-  locker: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3.5 3 6.5l1.8 4 2.2-1V20h10V9.500l2.2 1 1.800-4-5.500-3a3.500 3.500 0 0 1-7 0z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
-  profile: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 20.500c.8-4 3.700-6 7.500-6s6.700 2 7.500 6" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round"/></svg>',
-  settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.200" fill="none" stroke="currentColor" stroke-width="1.800"/><path d="M12 2.800v3M12 18.200v3M2.800 12h3M18.200 12h3M5.500 5.500l2.100 2.100M16.400 16.400l2.100 2.100M5.500 18.500l2.100-2.100M16.400 7.600l2.100-2.100" stroke="currentColor" stroke-width="1.800" stroke-linecap="round"/></svg>',
-  trophy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1.500A3.500 3.500 0 0 0 7.500 11M17 6h3v1.500a3.500 3.500 0 0 1-3.500 3.500M12 14v4M8.500 20h7" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  globe: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 12h18M12 3c3 3.2 3 14.800 0 18M12 3c-3 3.200-3 14.800 0 18" fill="none" stroke="currentColor" stroke-width="1.800"/></svg>',
-  check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.500l4.500 4.500L19 7.500" fill="none" stroke="currentColor" stroke-width="2.600" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-};
+/** Coin: a steel disc engraved with the seam of the ball. */
+const PIECE =
+  '<svg class="piece" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.2" fill="#c9d0d8" stroke="#5e6977" stroke-width="1"/><circle cx="8" cy="8" r="5" fill="none" stroke="#7b8592" stroke-width=".8"/><path d="M3.4 5.2c2.6 1.2 2.6 4.4 0 5.6M12.6 5.2c-2.6 1.2-2.6 4.4 0 5.6" fill="none" stroke="#49525e" stroke-width="1.1" stroke-linecap="round"/></svg>';
+const CHEVRON = '<svg class="chev" viewBox="0 0 9 12" aria-hidden="true"><path d="M2 1.2l5 4.800-5 4.800" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
+const CHECK = '<svg viewBox="0 0 9 9" aria-hidden="true"><path d="M1.6 4.700l2 2 3.800-4.200" fill="none" stroke="#141a05" stroke-width="1.700"/></svg>';
+const GEAR =
+  '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="2.8"/><path d="M10 1.800v2.600M10 15.600v2.600M1.800 10h2.600M15.600 10h2.600M4.200 4.200l1.850 1.850M13.950 13.950l1.850 1.850M15.800 4.200l-1.850 1.850M6.050 13.950L4.200 15.800"/><circle cx="10" cy="10" r="5.9"/></svg>';
+const BACK = '<svg viewBox="0 0 10 16" aria-hidden="true"><path d="M8.200 1.400L2 8l6.200 6.600" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+const TROPHY =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1.500A3.500 3.500 0 0 0 7.500 11M17 6h3v1.500a3.500 3.500 0 0 1-3.500 3.500M12 14v4M8.500 20h7" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-const TABS: Array<[HomeTab, string, string]> = [
-  ['play', 'Accueil', ICONS.play],
-  ['online', 'En ligne', ICONS.globe],
-  ['shop', 'Boutique', ICONS.shop],
-  ['locker', 'Vestiaire', ICONS.locker],
-  ['profile', 'Profil', ICONS.profile],
-  ['settings', 'Réglages', ICONS.settings],
+/** The main action: a felt ball with its two seams. */
+const balle = (label: string, attrs: string, small = false): string =>
+  `<button class="balle${small ? ' petite' : ''}" ${attrs}><svg class="couture" viewBox="0 0 180 56" preserveAspectRatio="none" aria-hidden="true"><path d="M10 -4C27 14 27 42 10 60M170 -4C153 14 153 42 170 60"/></svg><span>${label}</span></button>`;
+
+const TABS: Array<[HomeTab, string]> = [
+  ['play', 'Jouer'],
+  ['online', 'En ligne'],
+  ['locker', 'Vestiaire'],
+  ['shop', 'Boutique'],
+  ['profile', 'Carrière'],
 ];
 
-const KINDS: Array<[ItemKind, string]> = [
-  ['racket', 'Raquettes'],
-  ['outfit', 'Tenues'],
-  ['court', 'Terrains'],
-  ['ball', 'Balles'],
+const KINDS: Array<[ItemKind, string, string]> = [
+  ['racket', 'Raquette', 'Raquettes'],
+  ['outfit', 'Tenue', 'Tenues'],
+  ['court', 'Terrain', 'Terrains'],
+  ['ball', 'Balle', 'Balles'],
 ];
 
 const DIFFS: Array<[Difficulty, string]> = [
@@ -70,19 +75,59 @@ const DIFFS: Array<[Difficulty, string]> = [
   ['hard', 'Difficile'],
 ];
 
+/** Rarity is told by the number of tightened bolts, and a tint on the pane's top edge. */
+const RARITY: Record<string, { cls: string; bolts: number }> = {
+  standard: { cls: 'r-commun', bolts: 1 },
+  commun: { cls: 'r-commun', bolts: 1 },
+  rare: { cls: 'r-rare', bolts: 2 },
+  épique: { cls: 'r-epique', bolts: 3 },
+  légendaire: { cls: 'r-legendaire', bolts: 4 },
+};
+
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 const fmt = (n: number) => n.toLocaleString('fr-FR');
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
+const bolts = (rarity: string, withName: boolean): string => {
+  const r = RARITY[rarity] ?? RARITY.commun;
+  const dots = [0, 1, 2, 3].map((i) => `<i${i < r.bolts ? ' class="s"' : ''}></i>`).join('');
+  return `<span class="rarete ${r.cls}"><span class="b4">${dots}</span>${withName ? rarity : ''}</span>`;
+};
+
+/** Drawing of an item in its own colours. */
+function itemArt(kind: ItemKind, color: number, color2: number | undefined, cls: string): string {
+  const c = hex(color);
+  const c2 = hex(color2 ?? 0x14161a);
+  if (kind === 'racket') {
+    return `<svg class="${cls} haute" viewBox="0 0 52 100" aria-hidden="true">
+      <rect x="22.4" y="63" width="7.2" height="32" rx="2" fill="#dfe3e8"/><path d="M22.4 69.500h7.200M22.400 74.500h7.200M22.400 79.500h7.200M22.400 84.500h7.200M22.400 89.500h7.200" stroke="#8d96a2" stroke-width="1"/>
+      <rect x="21.2" y="93" width="9.6" height="5" rx="1.6" fill="#1a212b" stroke="#98a2af" stroke-width=".6"/>
+      <path d="M9.500 44L22.400 66h7.200L42.500 44z" fill="${c2}" stroke="rgba(255,255,255,.34)" stroke-width="1.2" stroke-linejoin="round"/>
+      <path d="M20.600 54.500L26 63.200l5.400-8.700z" fill="#070b13" stroke="rgba(255,255,255,.25)" stroke-width=".7"/>
+      <ellipse cx="26" cy="28.5" rx="23.2" ry="26.5" fill="${c2}" stroke="rgba(255,255,255,.42)" stroke-width="1.4"/>
+      <g fill="rgba(128,138,150,.55)"><circle cx="20" cy="14" r="1.25"/><circle cx="26" cy="14" r="1.25"/><circle cx="14" cy="21" r="1.25"/><circle cx="20" cy="21" r="1.25"/><circle cx="26" cy="21" r="1.25"/><circle cx="32" cy="21" r="1.25"/><circle cx="11" cy="28" r="1.25"/><circle cx="17" cy="28" r="1.25"/><circle cx="23" cy="28" r="1.25"/><circle cx="29" cy="28" r="1.25"/><circle cx="14" cy="35" r="1.25"/><circle cx="20" cy="35" r="1.25"/><circle cx="26" cy="35" r="1.25"/><circle cx="32" cy="35" r="1.25"/><circle cx="20" cy="42" r="1.25"/><circle cx="26" cy="42" r="1.25"/></g>
+      <path d="M34.500 8.500C46.500 16 46.500 41 34.500 48.500" fill="none" stroke="${c}" stroke-width="4.2" stroke-linecap="round"/></svg>`;
+  }
+  if (kind === 'outfit') {
+    return `<svg class="${cls}" viewBox="0 0 52 60" aria-hidden="true"><path d="M17 3L3 10l4 9.200 6-2.400v17h26v-17l6 2.400 4-9.200L35 3c-1.800 4.800-16.200 4.800-18 0z" fill="${c}" stroke="rgba(255,255,255,.5)" stroke-width="1.4" stroke-linejoin="round"/><path d="M14 37h24l3 19H28l-2-9-2 9H11z" fill="${hex(color2 ?? 0x1b2740)}" stroke="rgba(255,255,255,.4)" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
+  }
+  if (kind === 'court') {
+    return `<svg class="${cls}" viewBox="0 0 52 60" aria-hidden="true"><path d="M12 6h28l8 48H4z" fill="${c}" stroke="#f5f7f8" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 30h36M26 16v28M10.300 16h31.400M6.300 44h39.400" stroke="#f5f7f8" stroke-width="1.2" fill="none"/></svg>`;
+  }
+  return `<svg class="${cls}" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="22" fill="${c}" stroke="rgba(0,0,0,.35)" stroke-width="1"/><path d="M9.500 11c10 6 10 24 0 30M42.500 11c-10 6-10 24 0 30" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>`;
+}
+
 /**
- * The game's home: mode selection, shop, locker room, profile and settings, laid over the live
- * 3D scene with the player's character on the right.
+ * The game's home, in the manner of a lobby: the player's team stands on court in the live 3D
+ * scene; a tab bar runs along the top, the mode and the big play button sit bottom right, the
+ * day's challenge and the tournament on the left. The panels are panes of glass in steel
+ * frames, like the walls of the court.
  */
 export class Home {
   private root: HTMLElement;
   private body: HTMLElement;
   private top: HTMLElement;
-  private nav: HTMLElement;
+  private plates: HTMLElement[];
   private settings: Settings;
   private profile: Profile;
   private cb: HomeCallbacks;
@@ -103,11 +148,12 @@ export class Home {
     this.mode = profile.lastMode;
     this.root = document.createElement('div');
     this.root.className = 'home hidden';
-    this.root.innerHTML = '<header class="home-top"></header><main class="home-body"></main><nav class="home-nav" aria-label="Sections"></nav>';
+    this.root.innerHTML =
+      '<header class="barre"></header><main class="home-body"></main><div class="repere vous"></div><div class="repere partenaire"></div>';
     parent.appendChild(this.root);
-    this.top = this.root.querySelector('.home-top')!;
+    this.top = this.root.querySelector('.barre')!;
     this.body = this.root.querySelector('.home-body')!;
-    this.nav = this.root.querySelector('.home-nav')!;
+    this.plates = [this.root.querySelector('.repere.vous')!, this.root.querySelector('.repere.partenaire')!];
     this.root.addEventListener('click', (e) => this.click(e));
     this.root.addEventListener('input', (e) => this.input(e));
     this.root.addEventListener('change', (e) => this.change(e));
@@ -122,8 +168,10 @@ export class Home {
     this.root.classList.toggle('hidden', !on);
     if (on) {
       this.selected = null;
+      if (this.tab === 'modes') this.tab = 'play';
       this.render();
       this.cb.onLoadout(this.profile.equipped);
+      this.cb.onFormat(this.profile.format);
       this.cb.onTab(this.tab);
     }
   }
@@ -134,6 +182,31 @@ export class Home {
     if (this.visible) {
       this.cb.onTab(tab);
       this.render();
+    }
+  }
+
+  /**
+   * Where the players stand on screen (CSS pixels, top of the head), so that their name tags
+   * follow them. `null` hides a tag.
+   */
+  setAnchors(points: Array<{ x: number; y: number } | null>): void {
+    for (let i = 0; i < this.plates.length; i++) {
+      const el = this.plates[i];
+      const pt = this.tab === 'play' ? points[i] : null;
+      if (!pt) {
+        if (el.style.display !== 'none') el.style.display = 'none';
+        continue;
+      }
+      if (el.style.display === 'none') el.style.display = '';
+      // When the two players stand close on screen, the partner's tag slides aside so that the
+      // two never cover each other.
+      let x = pt.x;
+      const me = points[0];
+      if (i === 1 && me && Math.abs(pt.y - me.y) < 26) {
+        const room = (this.plates[0].offsetWidth + el.offsetWidth) / 2 + 6;
+        if (Math.abs(x - me.x) < room) x = me.x + (x >= me.x ? room : -room);
+      }
+      el.style.transform = `translate(${Math.round(x)}px, ${Math.round(pt.y)}px) translate(-50%, -100%)`;
     }
   }
 
@@ -177,116 +250,188 @@ export class Home {
   private render(): void {
     const p = this.profile;
     const lv = levelOf(p.xp);
-    this.top.innerHTML = `
-      <button class="player-chip" data-tab="profile" aria-label="Profil">
-        <span class="lvl"><b>${lv.level}</b></span>
-        <span class="pc-text">
-          <span class="pc-name">${esc(p.name)}</span>
-          <span class="xp"><i style="width:${Math.round((lv.into / lv.span) * 100)}%"></i></span>
-        </span>
-      </button>
-      <div class="brand">PADEL <span>3D</span></div>
-      <div class="wallet" title="Pièces gagnées en jouant">${ICONS.coin}<b>${fmt(p.coins)}</b></div>`;
-    this.nav.innerHTML = TABS.map(
-      ([id, label, icon]) => `<button data-tab="${id}" class="${this.tab === id ? 'on' : ''}" ${this.tab === id ? 'aria-current="page"' : ''}>${icon}<span>${label}</span></button>`,
-    ).join('');
+    const arc = (91.1 * lv.into) / lv.span;
+    const ring = `<span class="anneau"><svg viewBox="0 0 34 34" aria-hidden="true"><circle class="fond" cx="17" cy="17" r="14.5"/><circle class="arc" cx="17" cy="17" r="14.5" stroke-dasharray="${arc.toFixed(1)} 91.1"/></svg><b>${lv.level}</b></span>`;
+    const purse = `<div class="bourse" title="Pièces gagnées en jouant" aria-label="${fmt(p.coins)} pièces">${PIECE}<b>${fmt(p.coins)}</b></div>`;
+    if (this.tab === 'modes') {
+      this.top.innerHTML = `
+        <button class="outil retour" data-tab="play" aria-label="Retour au salon">${BACK}</button>
+        <div class="fil"><span class="onglet">Jouer</span><span class="onglet actif" aria-current="page">Mode de jeu</span></div>
+        <span class="pousse"></span>
+        <span class="profil" aria-label="Niveau ${lv.level}">${ring}</span>${purse}`;
+    } else {
+      // A little ball on the shop tab when something new can be afforded.
+      const canBuy = CATALOG.some((i) => !p.owned.includes(i.id) && i.price <= p.coins);
+      const tabs = TABS.map(([id, label]) => {
+        const on = this.tab === id;
+        const dot = id === 'shop' && canBuy && !on ? '<i class="point" aria-label="objets à votre portée"></i>' : '';
+        return `<button class="onglet${on ? ' actif' : ''}" data-tab="${id}" ${on ? 'aria-current="page"' : ''}>${label}${dot}</button>`;
+      }).join('');
+      this.top.innerHTML = `
+        <nav class="onglets" aria-label="Menu principal">${tabs}</nav>
+        <span class="pousse"></span>
+        <button class="profil" data-tab="profile" aria-label="${esc(p.name)}, niveau ${lv.level}">${ring}
+          <span class="profil-t"><b class="pc-name">${esc(p.name)}</b><small>${fmt(lv.into)} / ${fmt(lv.span)} XP</small></span></button>
+        ${purse}
+        <button class="outil${this.tab === 'settings' ? ' actif' : ''}" data-tab="settings" aria-label="Réglages et aide">${GEAR}</button>`;
+    }
     let html = '';
-    if (this.tab === 'play') html = this.renderPlay();
+    if (this.tab === 'play') html = this.renderLobby();
+    else if (this.tab === 'modes') html = this.renderModes();
     else if (this.tab === 'online') html = this.renderOnline();
     else if (this.tab === 'shop') html = this.renderItems(false);
     else if (this.tab === 'locker') html = this.renderItems(true);
     else if (this.tab === 'profile') html = this.renderProfile();
     else html = this.renderSettings();
-    this.body.innerHTML = `<section class="pane pane-${this.tab}">${html}</section>`;
+    this.root.dataset.view = this.tab;
+    this.body.innerHTML = html;
+    this.plates[0].innerHTML = `<i class="bille"></i>Vous <small>${esc(p.name)}</small>`;
+    this.plates[1].innerHTML = '<i class="ia"></i>IA <small>partenaire</small>';
   }
 
-  private renderPlay(): string {
+  /** Difficulty actually played in a mode, and whether the player may change it. */
+  private difficultyOf(mode: ReturnType<typeof modeById>): { value: Difficulty; fixed: boolean } {
+    if (mode.id === 'tournament') return { value: TOURNAMENT_ROUNDS[this.profile.tournamentRound].difficulty, fixed: true };
+    if (mode.difficulty) return { value: mode.difficulty, fixed: true };
+    return { value: this.settings.difficulty, fixed: false };
+  }
+
+  private rewardOf(mode: ReturnType<typeof modeById>): string {
+    if (mode.id === 'daily' && this.profile.dailyDone === today()) return '<span class="detail">Bonus du jour obtenu</span>';
+    return `<span class="detail">Victoire</span><span class="gain"><b>+${mode.winCoins}</b>${PIECE}</span>`;
+  }
+
+  private renderLobby(): string {
     const p = this.profile;
     const mode = modeById(this.mode);
-    const cards = MODES.filter((m) => !m.hidden).map((m) => {
-      let badge = '';
-      if (m.id === 'tournament') badge = `<em class="badge">${p.tournamentRound + 1}/3</em>`;
-      if (m.id === 'daily') badge = p.dailyDone === today() ? `<em class="badge done">${ICONS.check}</em>` : '<em class="badge hot">+300</em>';
-      return `<button class="mode-card ${m.id === this.mode ? 'on' : ''}" data-mode="${m.id}">
-        <span class="mc-name">${m.name}</span><span class="mc-tag">${m.tagline}</span>${badge}</button>`;
+    const diff = this.difficultyOf(mode);
+    const daily = modeById('daily');
+    const done = p.dailyDone === today();
+    const round = p.tournamentRound;
+    const rounds = TOURNAMENT_ROUNDS.map((x, i) => {
+      const cls = i < round ? ' gagne' : i === round ? ' encours' : '';
+      return `<span class="tour${cls}"><i>${i < round ? CHECK : ''}</i>${x.name.replace(/[- ]?(de )?finale$/i, '') || 'Finale'}</span>`;
     }).join('');
-
-    let extra = '';
-    let difficulty: string;
-    if (mode.id === 'tournament') {
-      extra = `<div class="rounds">${TOURNAMENT_ROUNDS.map((x, i) => `<span class="${i < p.tournamentRound ? 'won' : i === p.tournamentRound ? 'cur' : ''}">${x.name.replace(' de finale', '')}</span>`).join('')}</div>`;
-      difficulty = '';
-    } else if (mode.difficulty) {
-      difficulty = `<div class="fixed-diff">Difficulté : <b>${DIFFS.find((d) => d[0] === mode.difficulty)![1]}</b></div>`;
-    } else {
-      difficulty = `<div class="seg" role="group" aria-label="Difficulté">${DIFFS.map(
-        ([d, label]) => `<button data-diff="${d}" class="${this.settings.difficulty === d ? 'on' : ''}">${label}</button>`,
-      ).join('')}</div>`;
-    }
-    const dailyDone = mode.id === 'daily' && p.dailyDone === today();
-    const reward = dailyDone ? 'Bonus du jour déjà obtenu' : `Victoire ${ICONS.coin}<b>+${mode.winCoins}</b>`;
+    const sub = mode.id === 'tournament' ? TOURNAMENT_ROUNDS[round].name : mode.tagline;
     return `
-      <div class="kicker">Modes de jeu</div>
-      <div class="mode-grid">${cards}</div>
-      <p class="mode-desc">${mode.detail}</p>
-      <div class="detail-row">
-        <div class="seg format" role="group" aria-label="Format">
-          <button data-format="double" class="${p.format === 'double' ? 'on' : ''}">Double 2v2</button>
-          <button data-format="single" class="${p.format === 'single' ? 'on' : ''}">Simple 1v1</button>
+      <aside class="mur gauche" aria-label="À faire">
+        <button class="vitre carte defi${done ? ' fait' : ''}" data-pick="daily">
+          <span class="rang"><span class="sur">Défi du jour</span>
+            <span class="etat">${done ? `Relevé<svg class="coche" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="#d4f03c"/><path d="M4.400 8.300l2.400 2.400 4.800-5" fill="none" stroke="#141a05" stroke-width="1.9"/></svg>` : '<i class="cercle"></i>'}</span></span>
+          <span class="nom"><strong class="titre">Tie-break</strong><span class="detail">${DIFFS.find((d) => d[0] === daily.difficulty)![1].toLowerCase()}</span></span>
+          <span class="pied"><span class="gain"><b>+${daily.winCoins}</b>${PIECE}</span><span class="aller">${done ? 'Rejouer' : 'Relever'}${CHEVRON}</span></span>
+        </button>
+        <button class="vitre carte tournoi" data-pick="tournament">
+          <span class="rang"><span class="sur">Tournoi</span><span class="etat">Tour ${round + 1} / 3</span></span>
+          <span class="tours" style="--fait:${round}">${rounds}</span>
+        </button>
+        <button class="vitre carte enligne" data-tab="online">
+          <svg class="picto" viewBox="0 0 30 30" fill="none" stroke="#f5f7f8" stroke-width="1.5" aria-hidden="true"><path d="M5.500 20.500C8 8.500 22 8.500 24.500 20.500" stroke-dasharray="2.2 2.6"/><circle cx="5.5" cy="22.5" r="3"/><circle cx="24.5" cy="22.5" r="3"/><circle cx="15" cy="9.2" r="2.6" fill="#d4f03c" stroke="none"/></svg>
+          <span class="txt"><strong class="titre">En ligne</strong><span class="detail">Classique · Classé</span></span>${CHEVRON}
+        </button>
+      </aside>
+      <section class="mur droite" aria-label="Lancer un match">
+        <button class="vitre mode" data-tab="modes" aria-label="Changer de mode de jeu">
+          <span class="rang"><span class="sur">Mode</span><span class="changer"><span>Changer</span>${CHEVRON}</span></span>
+          <strong class="titre">${mode.name}</strong>
+          <span class="regles">${sub}<br><b>${p.format === 'double' ? 'Double 2v2' : 'Simple 1v1'}</b><i></i><b>${DIFFS.find((d) => d[0] === diff.value)![1]}</b></span>
+          <span class="gainligne">${this.rewardOf(mode)}</span>
+        </button>
+        ${balle('Jouer', 'data-act="play"')}
+      </section>`;
+  }
+
+  private renderModes(): string {
+    const p = this.profile;
+    const mode = modeById(this.mode);
+    const diff = this.difficultyOf(mode);
+    const signs: Partial<Record<ModeId, string>> = {
+      quick: '<span class="num">1</span><span class="unite">set</span>',
+      full: '<span class="num">2</span><span class="unite">sets <br>gagnants</span>',
+      tiebreak: '<span class="num">7</span><span class="unite">premier <br>à sept</span>',
+      tournament: '<span class="num">3</span><span class="unite">tours</span>',
+      training:
+        '<svg class="picto" viewBox="0 0 30 30" fill="none" stroke="#f5f7f8" stroke-width="1.6" aria-hidden="true"><path d="M2 8.800h26M15 8.800V29"/><circle cx="22" cy="17.5" r="3.4" fill="#d4f03c" stroke="none"/></svg><span class="unite">sans <br>pression</span>',
+      daily:
+        '<svg class="picto" viewBox="0 0 30 30" fill="none" stroke="#f5f7f8" stroke-width="1.6" aria-hidden="true"><path d="M3.800 7.800h22.400v19.400H3.800zM3.800 13h22.400M9.500 3.600v6M20.500 3.600v6"/><circle cx="15" cy="20" r="3.4" fill="#d4f03c" stroke="none"/></svg><span class="unite">bonus <br>quotidien</span>',
+    };
+    const cards = MODES.filter((m) => !m.hidden)
+      .map((m) => {
+        const on = m.id === this.mode;
+        let mark = '<i class="bille"></i>';
+        if (m.id === 'tournament') {
+          mark = `<span class="trois" aria-label="Tour ${p.tournamentRound + 1} sur 3">${[0, 1, 2].map((i) => `<i class="${i < p.tournamentRound ? 'g' : i === p.tournamentRound ? 'c' : ''}"></i>`).join('')}</span>`;
+        }
+        return `<button class="vitre carte-mode${on ? ' choisi' : ''}" data-mode="${m.id}" role="radio" aria-checked="${on}">
+          <span class="tete"><strong class="titre">${m.name}</strong>${mark}</span>
+          <span class="bas"><span class="signe">${signs[m.id] ?? ''}</span></span></button>`;
+      })
+      .join('');
+    const seg = (attr: string, value: string, label: string, on: boolean, disabled = false) =>
+      `<button data-${attr}="${value}" class="${on ? 'choisi' : ''}" aria-pressed="${on}" ${disabled ? 'disabled' : ''}>${label}</button>`;
+    return `
+      <section class="mur modes">
+        <div class="reglages">
+          <div class="groupe format"><span class="sur">Format</span>
+            <div class="segments" role="group" aria-label="Format">${seg('format', 'double', 'Double 2v2', p.format === 'double')}${seg('format', 'single', 'Simple 1v1', p.format === 'single')}</div></div>
+          <div class="groupe difficulte"><span class="sur">Difficulté${diff.fixed ? ' <em>fixée par le mode</em>' : ''}</span>
+            <div class="segments${diff.fixed ? ' fige' : ''}" role="group" aria-label="Difficulté">${DIFFS.map(([d, label]) => seg('diff', d, label, diff.value === d, diff.fixed)).join('')}</div></div>
         </div>
-        ${extra || difficulty}
-      </div>
-      <div class="play-row">
-        <button class="play-btn" data-act="play"><span>Jouer</span>${ICONS.play}</button>
-        <div class="reward">${reward}</div>
-      </div>`;
+        <p class="resume">${mode.detail}</p>
+        <div class="grille" role="radiogroup" aria-label="Mode de jeu">${cards}</div>
+        <div class="vitre sans-boulons pied-modes">
+          <span class="victoire">${this.rewardOf(mode)}</span>
+          ${balle('Valider', 'data-tab="play"', true)}
+        </div>
+      </section>`;
   }
 
   private renderOnline(): string {
     const st = this.lobby;
     const o = this.online;
-    const ratings = o ? `<small>Classement · 1v1 <b>${o.r1}</b> · 2v2 <b>${o.r2}</b></small>` : '<small>Affrontez d’autres joueurs en direct</small>';
-    const head = `<div class="kicker">En ligne${ratings}</div>`;
+    const ratings = o ? `Classement · 1v1 <b>${o.r1}</b> · 2v2 <b>${o.r2}</b>` : 'Affrontez d’autres joueurs en direct';
+    const head = `<div class="rayon-tete"><span class="sur">En ligne</span><small>${ratings}</small></div>`;
     const labels: Record<QueueMode, string> = { c2: 'Classique 2v2', r2: 'Classé 2v2', c1: 'Classique 1v1', r1: 'Classé 1v1' };
+    const wall = (inner: string) => `<section class="mur large ligne">${head}${inner}</section>`;
     if (st.kind === 'searching') {
-      return `${head}
-        <div class="lobby-wait">
+      return wall(`
+        <div class="vitre attente">
           <div class="pulse" aria-hidden="true"></div>
-          <h2>Recherche d’un adversaire</h2>
+          <h2 class="titre">Recherche d’un adversaire</h2>
           <p>${labels[st.mode]} · <span class="search-time">${this.elapsed(st.since)}</span></p>
           <p class="hint">Le match démarre dès qu’un autre joueur cherche le même mode. Peu de monde en ligne ? Invitez un ami avec un code.</p>
-          <button class="ghost-btn" data-act="cancel-online">Annuler</button>
-        </div>`;
+          <button class="verre-btn" data-act="cancel-online">Annuler</button>
+        </div>`);
     }
     if (st.kind === 'hosting') {
-      return `${head}
-        <div class="lobby-wait">
-          <h2>Code de la partie</h2>
+      return wall(`
+        <div class="vitre attente">
+          <h2 class="titre">Code de la partie</h2>
           <div class="room-code" aria-label="Code">${st.code.split('').map((c) => `<span>${c}</span>`).join('')}</div>
           <p>${st.mode === 'i1' ? 'Un contre un' : 'Double : chacun joue avec un partenaire IA'} · en attente de votre ami…</p>
-          <div class="settings-actions">
-            <button class="act-btn primary" data-act="share" data-code="${st.code}">Envoyer l’invitation</button>
-            <button class="ghost-btn" data-act="cancel-online">Annuler</button>
+          <div class="actions">
+            ${balle('Inviter', `data-act="share" data-code="${st.code}"`, true)}
+            <button class="verre-btn" data-act="cancel-online">Annuler</button>
           </div>
-        </div>`;
+        </div>`);
     }
     if (st.kind === 'joining' || st.kind === 'connecting') {
       const who = st.kind === 'connecting' && st.opponent ? `Connexion à ${esc(st.opponent)}…` : 'Connexion…';
-      return `${head}
-        <div class="lobby-wait">
+      return wall(`
+        <div class="vitre attente">
           <div class="pulse" aria-hidden="true"></div>
-          <h2>${who}</h2>
+          <h2 class="titre">${who}</h2>
           <p class="hint">Mise en relation directe de vos deux appareils.</p>
-          <button class="ghost-btn" data-act="cancel-online">Annuler</button>
-        </div>`;
+          <button class="verre-btn" data-act="cancel-online">Annuler</button>
+        </div>`);
     }
     if (st.kind === 'error') {
-      return `${head}
-        <div class="lobby-wait">
-          <h2>Connexion impossible</h2>
+      return wall(`
+        <div class="vitre attente">
+          <h2 class="titre">Connexion impossible</h2>
           <p>${esc(st.message)}</p>
-          <button class="act-btn primary" data-act="cancel-online">OK</button>
-        </div>`;
+          ${balle('OK', 'data-act="cancel-online"', true)}
+        </div>`);
     }
     if (this.board) {
       const b = this.board;
@@ -297,40 +442,42 @@ export class Home {
           : b.rows.length === 0
             ? '<p class="hint">Aucun match classé joué pour l’instant. Soyez le premier !</p>'
             : `<ol class="board">${b.rows.map((r, i) => `<li><span class="rank">${i + 1}</span><span class="who">${esc(r.name)}</span><span class="wl">${r.wins} V · ${r.losses} D</span><b>${r.rating}</b></li>`).join('')}</ol>`;
-      return `${head}
-        <div class="chips">
-          <button data-board="2" class="${b.kind === '2' ? 'on' : ''}">Classement 2v2</button>
-          <button data-board="1" class="${b.kind === '1' ? 'on' : ''}">Classement 1v1</button>
+      return wall(`
+        <div class="segments board-tabs" role="group" aria-label="Classement">
+          <button data-board="2" class="${b.kind === '2' ? 'choisi' : ''}">Classement 2v2</button>
+          <button data-board="1" class="${b.kind === '1' ? 'choisi' : ''}">Classement 1v1</button>
           <button data-act="close-board">Retour</button>
         </div>
-        <div class="board-wrap">${rows}</div>`;
+        <div class="vitre sans-boulons board-wrap">${rows}</div>`);
     }
     const card = (mode: QueueMode, sub: string, ranked: boolean) =>
-      `<button class="mode-card online-card ${ranked ? 'ranked' : ''}" data-queue="${mode}"><span class="mc-name">${labels[mode]}</span><span class="mc-tag">${sub}</span></button>`;
-    return `${head}
-      <div class="mode-grid two">
+      `<button class="vitre carte-mode file${ranked ? ' classe' : ''}" data-queue="${mode}">
+        <span class="tete"><strong class="titre">${labels[mode]}</strong>${ranked ? '<i class="bille"></i>' : ''}</span>
+        <span class="bas"><span class="unite">${sub}</span></span></button>`;
+    return wall(`
+      <div class="grille deux">
         ${card('c2', 'Vous + un partenaire IA', false)}
         ${card('r2', 'Compte pour le classement', true)}
         ${card('c1', 'Seul contre seul', false)}
         ${card('r1', 'Compte pour le classement', true)}
       </div>
-      <div class="invite">
-        <div class="invite-col">
-          <span class="label">Jouer avec un ami</span>
-          <div class="settings-actions">
-            <button class="ghost-btn" data-invite="1">Inviter en 1v1</button>
-            <button class="ghost-btn" data-invite="2">Inviter en 2v2</button>
+      <div class="vitre sans-boulons inviter">
+        <div class="col">
+          <span class="sur">Inviter un ami</span>
+          <div class="actions">
+            <button class="verre-btn" data-invite="1" aria-label="Inviter un ami en 1 contre 1">1v1</button>
+            <button class="verre-btn" data-invite="2" aria-label="Inviter un ami en 2 contre 2">2v2</button>
           </div>
         </div>
-        <form class="invite-col join" data-join>
-          <label class="label" for="join-code">Rejoindre avec un code</label>
-          <div class="settings-actions">
+        <form class="col join" data-join>
+          <label class="sur" for="join-code">Code d’un ami</label>
+          <div class="actions">
             <input id="join-code" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="5" placeholder="CODE" />
-            <button class="act-btn primary" type="submit">Rejoindre</button>
+            <button class="verre-btn plein" type="submit">Rejoindre</button>
           </div>
         </form>
-      </div>
-      <div class="settings-actions"><button class="ghost-btn" data-act="board">${ICONS.trophy} Classement</button></div>`;
+        <button class="verre-btn classement" data-act="board" aria-label="Classement">${TROPHY}</button>
+      </div>`);
   }
 
   private async loadBoard(kind: '1' | '2'): Promise<void> {
@@ -343,37 +490,61 @@ export class Home {
     }
   }
 
+  /** Locker (owned items, to equip) and shop (everything, to buy): one slot open at a time. */
   private renderItems(ownedOnly: boolean): string {
     const p = this.profile;
-    const items = CATALOG.filter((i) => i.kind === this.kind && (!ownedOnly || p.owned.includes(i.id)));
+    // Locker: what is yours first, the rest behind wire mesh. Shop: what is for sale first.
+    const rank = (id: string) => (p.owned.includes(id) === ownedOnly ? 0 : 1);
+    const items = CATALOG.filter((i) => i.kind === this.kind).sort((a, b) => rank(a.id) - rank(b.id));
+    const mine = items.filter((i) => p.owned.includes(i.id)).length;
     const current = this.selected && items.some((i) => i.id === this.selected) ? this.selected : p.equipped[this.kind];
     const sel = itemById(current);
-    const chips = KINDS.map(([k, label]) => `<button data-kind="${k}" class="${this.kind === k ? 'on' : ''}">${label}</button>`).join('');
-    const cards = items
+    const slots = KINDS.map(([k, label]) => {
+      const eq = itemById(p.equipped[k]);
+      const forSale = CATALOG.filter((i) => i.kind === k && !p.owned.includes(i.id)).length;
+      const line = ownedOnly ? eq.name : forSale ? `${forSale} en vente` : 'Tout est à vous';
+      return `<button class="vitre casier${this.kind === k ? ' choisi' : ''}" data-kind="${k}" role="tab" aria-selected="${this.kind === k}">
+        <span class="sur">${label}</span><span class="nom">${line}</span>${ownedOnly ? bolts(eq.rarity, false) : ''}
+        ${itemArt(k, eq.color, eq.color2, 'mini')}</button>`;
+    }).join('');
+    const doors = items
       .map((i) => {
         const owned = p.owned.includes(i.id);
         const equipped = p.equipped[i.kind] === i.id;
-        const state = equipped ? `<span class="state eq">${ICONS.check}Équipé</span>` : owned ? '<span class="state">Possédé</span>' : `<span class="state price">${ICONS.coin}${fmt(i.price)}</span>`;
-        return `<button class="item-card r-${i.rarity} ${i.id === current ? 'on' : ''}" data-item="${i.id}">
-          <span class="swatch k-${i.kind}" style="--c:${hex(i.color)};--c2:${hex(i.color2 ?? i.color)}"></span>
-          <span class="ic-name">${i.name}</span>${state}</button>`;
+        const r = RARITY[i.rarity] ?? RARITY.commun;
+        const mark = equipped ? '<i class="bille"></i>Équipé' : '';
+        const last = owned
+          ? ownedOnly
+            ? `<span class="ligne3">${i.rarity}</span>`
+            : '<span class="ligne3 acquis">à vous</span>'
+          : `<span class="ligne3 prix">${fmt(i.price)}${PIECE}</span>`;
+        return `<button class="vitre porte ${r.cls}${i.id === current ? ' choisi' : ''}${owned ? '' : ' grille'}" data-item="${i.id}" role="radio" aria-checked="${i.id === current}">
+          <span class="marque">${mark}</span>${itemArt(i.kind, i.color, i.color2, 'art')}
+          <strong class="titre">${i.name}</strong>${bolts(i.rarity, false)}${last}</button>`;
       })
       .join('');
     const owned = p.owned.includes(sel.id);
     const equipped = p.equipped[sel.kind] === sel.id;
     let action: string;
-    if (equipped) action = `<button class="act-btn" disabled>${ICONS.check}Équipé</button>`;
-    else if (owned) action = `<button class="act-btn primary" data-act="equip" data-id="${sel.id}">Équiper</button>`;
-    else if (p.coins >= sel.price) action = `<button class="act-btn primary" data-act="buy" data-id="${sel.id}">Acheter ${ICONS.coin}${fmt(sel.price)}</button>`;
-    else action = `<button class="act-btn" disabled>Il manque ${ICONS.coin}${fmt(sel.price - p.coins)}</button>`;
+    if (equipped) action = '<span class="deja"><i class="bille"></i>Équipé</span>';
+    else if (owned) action = balle('Équiper', `data-act="equip" data-id="${sel.id}"`, true);
+    else if (p.coins >= sel.price) action = `<span class="prix">${fmt(sel.price)}${PIECE}</span>${balle('Acheter', `data-act="buy" data-id="${sel.id}" aria-label="Acheter ${sel.name} pour ${fmt(sel.price)} pièces"`, true)}`;
+    else action = `<span class="prix manque">Il manque ${fmt(sel.price - p.coins)}${PIECE}</span>`;
+    const title = KINDS.find((k) => k[0] === this.kind)![2];
+    const count = ownedOnly ? `${mine} à vous${items.length > mine ? ` · ${items.length - mine} en boutique` : ''}` : 'Prix en pièces · gagnées en jouant';
     return `
-      <div class="kicker">${ownedOnly ? 'Vestiaire' : 'Boutique'}<small>${ownedOnly ? 'Vos objets : touchez pour équiper' : 'Les pièces se gagnent en jouant — aucun achat réel'}</small></div>
-      <div class="chips">${chips}</div>
-      <div class="item-row">${cards}</div>
-      <div class="item-action">
-        <div class="ia-text"><b>${sel.name}</b><em class="rarity r-${sel.rarity}">${sel.rarity}</em><small>${sel.note}</small></div>
-        ${action}
-      </div>`;
+      <section class="mur large vestiaire">
+        <div class="casiers" role="tablist" aria-label="Emplacements">${slots}</div>
+        <i class="poteau"></i>
+        <div class="rayon">
+          <div class="rayon-tete"><span class="sur">${title}</span><small>${count}</small></div>
+          <div class="portes" role="radiogroup">${doors}</div>
+          <div class="vitre sans-boulons fiche">
+            <div class="qui"><div class="l1"><strong class="titre">${sel.name}</strong><span class="detail">${sel.note}</span></div>${bolts(sel.rarity, true)}</div>
+            ${action}
+          </div>
+        </div>
+      </section>`;
   }
 
   private renderProfile(): string {
@@ -381,22 +552,23 @@ export class Home {
     const s = p.stats;
     const lv = levelOf(p.xp);
     const rate = s.matches ? Math.round((s.wins / s.matches) * 100) : 0;
-    const cell = (label: string, value: string) => `<div class="stat"><b>${value}</b><span>${label}</span></div>`;
+    const arc = (163.4 * lv.into) / lv.span;
+    const cell = (label: string, value: string) => `<div class="vitre sans-boulons stat"><b class="num">${value}</b><span class="sur">${label}</span></div>`;
     return `
-      <div class="kicker">Profil</div>
-      <div class="profile-head">
-        <span class="lvl big"><b>${lv.level}</b></span>
-        <div class="ph-text">
-          <label class="name-field"><span class="sr">Nom du joueur</span><input type="text" maxlength="14" value="${esc(p.name)}" data-name autocomplete="off" spellcheck="false" /></label>
-          <div class="xp wide"><i style="width:${Math.round((lv.into / lv.span) * 100)}%"></i></div>
-          <small>Niveau ${lv.level} · ${fmt(lv.into)} / ${fmt(lv.span)} XP</small>
+      <section class="mur large carriere">
+        <div class="vitre fiche-joueur">
+          <span class="anneau grand"><svg viewBox="0 0 60 60" aria-hidden="true"><circle class="fond" cx="30" cy="30" r="26"/><circle class="arc" cx="30" cy="30" r="26" stroke-dasharray="${arc.toFixed(1)} 163.4"/></svg><b>${lv.level}</b></span>
+          <div class="qui">
+            <label class="name-field"><span class="sr">Nom du joueur</span><input type="text" maxlength="14" value="${esc(p.name)}" data-name autocomplete="off" spellcheck="false" /></label>
+            <small>Niveau ${lv.level} · ${fmt(lv.into)} / ${fmt(lv.span)} XP</small>
+          </div>
+          <div class="trophees" aria-label="${s.trophies} trophées">${TROPHY}<b>${s.trophies}</b></div>
         </div>
-        <div class="trophies">${ICONS.trophy}<b>${s.trophies}</b></div>
-      </div>
-      <div class="stats">
-        ${cell('Matchs', fmt(s.matches))}${cell('Victoires', fmt(s.wins))}${cell('Réussite', `${rate} %`)}${cell('Série record', fmt(s.bestStreak))}
-        ${cell('Points gagnés', fmt(s.pointsWon))}${cell('Aces', fmt(s.aces))}${cell('Coups gagnants', fmt(s.winners))}${cell('Plus long échange', fmt(s.longestRally))}
-      </div>`;
+        <div class="stats">
+          ${cell('Matchs', fmt(s.matches))}${cell('Victoires', fmt(s.wins))}${cell('Réussite', `${rate} %`)}${cell('Série record', fmt(s.bestStreak))}
+          ${cell('Points gagnés', fmt(s.pointsWon))}${cell('Aces', fmt(s.aces))}${cell('Coups gagnants', fmt(s.winners))}${cell('Plus long échange', fmt(s.longestRally))}
+        </div>
+      </section>`;
   }
 
   private renderSettings(): string {
@@ -404,30 +576,32 @@ export class Home {
     const check = (key: keyof Settings, label: string) =>
       `<label class="toggle"><input type="checkbox" data-set="${key}" ${s[key] ? 'checked' : ''} /><span class="track"></span><span>${label}</span></label>`;
     return `
-      <div class="kicker">Réglages</div>
-      <div class="settings-grid">
-        <label class="field"><span>Aide au placement <b id="assist-val">${Math.round(s.assist * 100)} %</b></span>
-          <input type="range" min="0" max="100" step="5" value="${Math.round(s.assist * 100)}" data-set="assist" /></label>
-        <label class="field"><span>Qualité graphique</span>
-          <select data-set="quality">
-            ${[
-              ['auto', 'Automatique'],
-              ['high', 'Haute'],
-              ['medium', 'Moyenne'],
-              ['low', 'Basse'],
-            ]
-              .map(([v, l]) => `<option value="${v}" ${s.quality === v ? 'selected' : ''}>${l}</option>`)
-              .join('')}
-          </select></label>
-        ${check('sound', 'Sons')}
-        ${check('voice', 'Annonce vocale du score')}
-        ${check('haptics', 'Vibration (Android)')}
-        ${check('showFps', 'Images par seconde')}
-      </div>
-      <div class="settings-actions">
-        <button class="ghost-btn" data-act="help">Comment jouer</button>
-        ${isStandalone() ? '' : '<button class="ghost-btn" data-act="install">Installer le jeu</button>'}
-      </div>`;
+      <section class="mur large reglages-jeu">
+        <div class="rayon-tete"><span class="sur">Réglages</span><small>Enregistrés sur cet appareil</small></div>
+        <div class="vitre champs">
+          <label class="field"><span>Aide au placement <b id="assist-val">${Math.round(s.assist * 100)} %</b></span>
+            <input type="range" min="0" max="100" step="5" value="${Math.round(s.assist * 100)}" data-set="assist" /></label>
+          <label class="field"><span>Qualité graphique</span>
+            <select data-set="quality">
+              ${[
+                ['auto', 'Automatique'],
+                ['high', 'Haute'],
+                ['medium', 'Moyenne'],
+                ['low', 'Basse'],
+              ]
+                .map(([v, l]) => `<option value="${v}" ${s.quality === v ? 'selected' : ''}>${l}</option>`)
+                .join('')}
+            </select></label>
+          ${check('sound', 'Sons')}
+          ${check('voice', 'Annonce vocale du score')}
+          ${check('haptics', 'Vibration (Android)')}
+          ${check('showFps', 'Images par seconde')}
+        </div>
+        <div class="actions">
+          <button class="verre-btn" data-act="help">Comment jouer</button>
+          ${isStandalone() ? '' : '<button class="verre-btn" data-act="install">Installer le jeu</button>'}
+        </div>
+      </section>`;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -439,6 +613,13 @@ export class Home {
     if (!t || t.disabled || t.closest('form')) return;
     const d = t.dataset;
     if (d.tab) return this.setTab(d.tab as HomeTab);
+    if (d.pick) {
+      // Shortcut from the lobby: the challenge or the tournament becomes the mode to play.
+      this.mode = d.pick as ModeId;
+      this.profile.lastMode = this.mode;
+      saveProfile(this.profile);
+      return this.render();
+    }
     if (d.mode) {
       this.mode = d.mode as ModeId;
       this.profile.lastMode = this.mode;
@@ -448,6 +629,7 @@ export class Home {
     if (d.format) {
       this.profile.format = d.format === 'single' ? 'single' : 'double';
       saveProfile(this.profile);
+      this.cb.onFormat(this.profile.format);
       return this.render();
     }
     if (d.queue) return this.cb.onQueue(d.queue as QueueMode);
@@ -517,7 +699,7 @@ export class Home {
       if (navigator.share) await navigator.share({ title: 'Padel 3D', text, url });
       else {
         await navigator.clipboard.writeText(`${text} — ${url}`);
-        const btn = this.body.querySelector('[data-act=share]');
+        const btn = this.body.querySelector('[data-act=share] span');
         if (btn) btn.textContent = 'Lien copié';
       }
     } catch {

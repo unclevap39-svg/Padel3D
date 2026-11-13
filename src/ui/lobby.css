@@ -1,0 +1,2028 @@
+/* =====================================================================================
+   « Verre et acier » — the menus of Padel 3D.
+   The interface is built out of the court itself, at night: panes of tempered glass held
+   by steel bolts between brushed-steel posts, white court lines to structure and to mark a
+   selection, and one saturated colour only: the felt of the ball, kept for the action.
+   One typeface, Archivo (OFL), upright, in two widths.
+   ===================================================================================== */
+
+@font-face {
+  font-family: 'Archivo Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  src: url('./fonts/archivo-latin-wdth.woff2') format('woff2-variations');
+}
+
+:root {
+  --nuit: #070b13;
+  --nuit-2: #0d1420;
+  --acier-9: #1a212b;
+  --acier-5: #5e6977;
+  --acier-3: #98a2af;
+  --acier-1: #d3d9e0;
+  /* The sea-green edge of tempered glass. */
+  --verre: #a9e4da;
+  /* Court-line white. */
+  --ligne: #f5f7f8;
+  /* Felt of the ball. */
+  --feutre: #d4f03c;
+  --feutre-encre: #141a05;
+  --txt: #f5f7f8;
+  --txt-2: rgba(245, 247, 248, 0.76);
+  --txt-3: rgba(245, 247, 248, 0.56);
+  /* Safe margins: notches left and right, home indicator at the bottom. */
+  --sl: max(12px, var(--safe-l));
+  --sr: max(12px, var(--safe-r));
+  --sb: max(10px, var(--safe-b));
+  /* The free hosting plan puts a badge in the bottom right corner: nothing to press there. */
+  --badge-l: 205px;
+  --badge-h: 50px;
+  --barre-h: 48px;
+  --ff: 'Archivo Variable', 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --acier-brosse: linear-gradient(90deg, #262d37 0%, #8c96a3 28%, #dfe4ea 46%, #77818e 62%, #2a313b 100%);
+}
+
+body {
+  font-family: var(--ff);
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* ---------- The home, over the live 3D scene ---------- */
+.home {
+  position: absolute;
+  inset: 0;
+  color: var(--txt);
+  font-family: var(--ff);
+  font-stretch: 100%;
+  font-size: 12px;
+  line-height: 1.25;
+  -webkit-font-smoothing: antialiased;
+}
+/* Floodlights: two cold halos at the top, a little night on the edges; the side that carries a
+   wall of glass is darkened so the panes read well. */
+.home::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 46% at 0% 0%, rgba(200, 230, 255, 0.1), transparent 70%),
+    radial-gradient(60% 46% at 100% 0%, rgba(200, 230, 255, 0.1), transparent 70%),
+    linear-gradient(180deg, rgba(7, 11, 19, 0.3), transparent 34%, transparent 70%, rgba(7, 11, 19, 0.34));
+}
+.home[data-view='modes']::before {
+  background: linear-gradient(90deg, transparent 30%, rgba(7, 11, 19, 0.5) 46%, rgba(7, 11, 19, 0.62));
+}
+.home:not([data-view='play']):not([data-view='modes'])::before {
+  background: linear-gradient(270deg, transparent 34%, rgba(7, 11, 19, 0.42) 52%, rgba(7, 11, 19, 0.58));
+}
+.home button {
+  text-align: inherit;
+}
+.home svg {
+  display: block;
+  flex: none;
+}
+.home-body {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---------- Type ---------- */
+.home .sur,
+.menu .sur {
+  font-size: 11px;
+  font-stretch: 125%;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--txt-2);
+  white-space: nowrap;
+}
+.home .sur em {
+  font-style: normal;
+  font-stretch: 100%;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--txt-3);
+  margin-left: 6px;
+}
+.home .titre,
+.menu .titre {
+  font-stretch: 120%;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--txt);
+}
+.home .detail {
+  font-size: 11.5px;
+  color: var(--txt-2);
+  font-weight: 450;
+}
+.home .piece,
+.menu .piece {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* ---------- Tab bar: a court line under a band of wire mesh ---------- */
+.home .barre {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(var(--barre-h) + var(--safe-t));
+  z-index: 6;
+  display: flex;
+  align-items: stretch;
+  padding: var(--safe-t) var(--sr) 2px var(--sl);
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 6px),
+    linear-gradient(180deg, rgba(7, 11, 19, 0.94), rgba(7, 11, 19, 0.74));
+}
+.home .barre::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--ligne);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.home .onglets,
+.home .fil {
+  display: flex;
+  align-items: stretch;
+}
+.home .fil {
+  margin-left: 4px;
+}
+.home .onglet {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 3px 13px 0;
+  font-size: 11.5px;
+  font-stretch: 125%;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--txt-2);
+  white-space: nowrap;
+}
+/* Active tab: the corner of a service box, standing on the line. */
+.home .onglet.actif {
+  color: var(--txt);
+  font-weight: 750;
+  background: linear-gradient(0deg, rgba(245, 247, 248, 0.17), rgba(245, 247, 248, 0.02) 78%, transparent);
+}
+.home .onglet.actif::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 3px;
+  height: 26px;
+  background: var(--ligne);
+}
+.home .onglet.actif::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1.5px;
+  background: var(--ligne);
+}
+.home .fil .onglet:not(.actif) {
+  color: var(--txt-3);
+  padding-right: 10px;
+}
+.home .onglet .point {
+  position: absolute;
+  top: 12px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--feutre);
+  box-shadow: 0 0 6px rgba(212, 240, 60, 0.7);
+}
+.home .pousse {
+  flex: 1;
+}
+.home .onglets,
+.home .bourse,
+.home .outil {
+  flex: none;
+}
+/* The name gives way first when the bar is short of room (long name, small phone). */
+.home .profil {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 4px;
+  min-height: 44px;
+  min-width: 46px;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+.home .anneau {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex: none;
+}
+.home .anneau svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.home .anneau circle {
+  fill: none;
+  stroke-width: 2.6;
+}
+.home .anneau .fond {
+  stroke: rgba(245, 247, 248, 0.22);
+}
+.home .anneau .arc {
+  stroke: var(--feutre);
+  stroke-linecap: round;
+}
+.home .anneau b {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-stretch: 125%;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.home .profil-t {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  overflow: hidden;
+}
+.home .profil-t b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-stretch: 125%;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.home .profil-t small {
+  font-size: 11px;
+  color: var(--txt-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.home .bourse {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-left: 1px solid rgba(245, 247, 248, 0.2);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.home .bourse b {
+  font-stretch: 125%;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+/* Square 44x44 tool button (settings, back). */
+.home .outil {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  align-self: center;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.home .outil::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  background: rgba(169, 228, 218, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(169, 228, 218, 0.34), inset 0 2px 0 rgba(214, 246, 240, 0.3);
+}
+.home .outil.actif::before {
+  background: rgba(245, 247, 248, 0.22);
+  box-shadow: inset 0 0 0 1.5px var(--ligne);
+}
+.home .outil svg {
+  position: relative;
+  width: 19px;
+  height: 19px;
+}
+.home .outil.retour svg {
+  width: 10px;
+  height: 16px;
+}
+
+/* ---------- The bolted pane of glass ---------- */
+.home .vitre,
+.menu .panel {
+  position: relative;
+  background:
+    linear-gradient(116deg, transparent 0 27%, rgba(255, 255, 255, 0.075) 27% 35%, transparent 35% 39%, rgba(255, 255, 255, 0.04) 39% 41.5%, transparent 41.5%),
+    linear-gradient(180deg, rgba(169, 228, 218, 0.13), rgba(169, 228, 218, 0.03) 34%, rgba(7, 11, 19, 0) 70%),
+    rgba(8, 14, 25, 0.8);
+  /* Edge of the glass: a bright line on top, sea-green around, an inner bevel. */
+  box-shadow:
+    inset 0 0 0 1px rgba(169, 228, 218, 0.34),
+    inset 0 0 0 3px rgba(169, 228, 218, 0.055),
+    inset 0 2px 0 rgba(214, 246, 240, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 12px 26px rgba(0, 0, 0, 0.34);
+}
+.home .vitre {
+  display: block;
+}
+/* In the lobby the few panes are real frosted glass; elsewhere the many panes are simply
+   tinted, which costs a phone far less than blurring the 3D scene behind each of them. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .home[data-view='play'] .vitre {
+    background-color: rgba(8, 14, 25, 0.54);
+    -webkit-backdrop-filter: blur(10px) saturate(1.25);
+    backdrop-filter: blur(10px) saturate(1.25);
+  }
+}
+/* Four steel bolts, one per corner. */
+.home .vitre::before,
+.menu .panel::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  pointer-events: none;
+  --boulon: radial-gradient(circle at 50% 50%, #11161d 0 0.9px, #e3e8ee 1.1px 1.9px, #6d7783 2.1px 2.9px, rgba(0, 0, 0, 0.55) 3.1px 3.4px, transparent 3.6px);
+  background:
+    var(--boulon) 0 0 / 7px 7px no-repeat,
+    var(--boulon) 100% 0 / 7px 7px no-repeat,
+    var(--boulon) 0 100% / 7px 7px no-repeat,
+    var(--boulon) 100% 100% / 7px 7px no-repeat;
+}
+.home .vitre.sans-boulons::before {
+  display: none;
+}
+.home button.vitre:active {
+  filter: brightness(1.25);
+}
+/* Selection: the corners of a service box, in line white. */
+.home .choisi::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  pointer-events: none;
+  z-index: 2;
+  --l: linear-gradient(var(--ligne), var(--ligne));
+  background:
+    var(--l) 0 0 / 22px 2px no-repeat,
+    var(--l) 0 0 / 2px 22px no-repeat,
+    var(--l) 100% 100% / 22px 2px no-repeat,
+    var(--l) 100% 100% / 2px 22px no-repeat;
+  filter: drop-shadow(0 0 4px rgba(245, 247, 248, 0.5));
+}
+.home .vitre.choisi {
+  background:
+    linear-gradient(116deg, transparent 0 27%, rgba(255, 255, 255, 0.1) 27% 35%, transparent 35% 39%, rgba(255, 255, 255, 0.05) 39% 41.5%, transparent 41.5%),
+    linear-gradient(180deg, rgba(222, 248, 243, 0.4), rgba(169, 228, 218, 0.17) 50%, rgba(169, 228, 218, 0.1)),
+    rgba(20, 32, 48, 0.86);
+  box-shadow:
+    inset 0 0 0 1px rgba(245, 247, 248, 0.62),
+    inset 0 0 0 3px rgba(169, 228, 218, 0.09),
+    inset 0 2px 0 rgba(255, 255, 255, 0.75),
+    0 12px 26px rgba(0, 0, 0, 0.34),
+    0 0 22px rgba(169, 228, 218, 0.16);
+}
+
+/* A stretch of wall: two steel posts with panes between them. */
+.home .mur {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0 4px;
+  z-index: 4;
+}
+.home .mur::before,
+.home .mur::after {
+  content: '';
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 4px;
+  background: var(--acier-brosse);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.6), 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+.home .mur::before {
+  left: 0;
+}
+.home .mur::after {
+  right: 0;
+}
+.home .poteau {
+  flex: none;
+  width: 4px;
+  margin: -6px 5px;
+  background: var(--acier-brosse);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.6), 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+/* Wall of the screens where the player stands on the right. */
+.home .mur.large {
+  left: var(--sl);
+  right: 34.4vw;
+  top: calc(var(--barre-h) + var(--safe-t) + 14px);
+  bottom: var(--sb);
+  gap: 7px;
+}
+
+/* ---------- The ball: main action ---------- */
+.home .balle,
+.menu .primary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 56px;
+  border-radius: 28px;
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--feutre-encre);
+  font-family: var(--ff);
+  font-stretch: 125%;
+  font-weight: 800;
+  font-size: 21px;
+  letter-spacing: 0.14em;
+  text-indent: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+  background: radial-gradient(130% 150% at 30% 12%, #effc8a 0%, var(--feutre) 34%, #b9d62b 74%, #92ae17 100%);
+  box-shadow:
+    0 0 0 1px rgba(20, 26, 5, 0.6),
+    0 0 0 4px rgba(212, 240, 60, 0.16),
+    0 12px 26px rgba(0, 0, 0, 0.5),
+    0 0 36px rgba(212, 240, 60, 0.3),
+    inset 0 -4px 7px rgba(72, 92, 0, 0.5),
+    inset 0 2px 3px rgba(255, 255, 255, 0.55);
+}
+/* The grain of the felt. */
+.home .balle::before,
+.menu .primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.35' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 .32 0 0 0 0 .40 0 0 0 0 0 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23f)'/%3E%3C/svg%3E");
+}
+.home .balle .couture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+}
+.home .balle .couture path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.78);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.home .balle.petite {
+  height: 44px;
+  border-radius: 22px;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-indent: 0.12em;
+  padding: 0 22px;
+}
+.home .balle:active,
+.menu .primary:active {
+  transform: translateY(2px) scale(0.985);
+  filter: brightness(0.95);
+}
+
+/* Secondary button: bare glass in a line-white frame. */
+.home .verre-btn,
+.menu .row button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 0;
+  font-family: var(--ff);
+  font-size: 11.5px;
+  font-stretch: 118%;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--txt);
+  background: rgba(169, 228, 218, 0.1);
+  box-shadow: inset 0 0 0 1.5px rgba(245, 247, 248, 0.85);
+}
+.home .verre-btn.plein {
+  background: var(--ligne);
+  color: var(--nuit);
+}
+.home .verre-btn:active,
+.menu .row button:active {
+  background: rgba(245, 247, 248, 0.3);
+}
+.home .verre-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---------- Coins won ---------- */
+.home .gain,
+.menu .gain {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--txt-2);
+  white-space: nowrap;
+}
+.home .gain b {
+  font-size: 15px;
+  color: var(--txt);
+  font-stretch: 125%;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Rarity: the number of tightened bolts ---------- */
+.home .rarete {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--r, var(--acier-3));
+}
+.home .rarete i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(245, 247, 248, 0.34);
+}
+.home .rarete i.s {
+  background: var(--r, var(--acier-3));
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.5);
+}
+.home .rarete .b4 {
+  display: inline-flex;
+  gap: 2.5px;
+}
+.home .r-commun {
+  --r: #aab3be;
+}
+.home .r-rare {
+  --r: #a9e4da;
+}
+.home .r-epique {
+  --r: #ffffff;
+}
+.home .r-legendaire {
+  --r: #d4f03c;
+}
+
+/* ---------- Segments (format, difficulty): a mullioned pane ---------- */
+.home .segments {
+  display: flex;
+  height: 44px;
+  position: relative;
+  background: rgba(8, 13, 23, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(169, 228, 218, 0.26), inset 0 2px 0 rgba(214, 246, 240, 0.3);
+}
+.home .segments button {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 44px;
+  padding: 0 8px;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-stretch: 112%;
+  font-weight: 550;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--txt-2);
+}
+.home .segments button + button {
+  box-shadow: inset 2px 0 0 -1px rgba(152, 162, 175, 0.55);
+}
+.home .segments button.choisi {
+  color: var(--txt);
+  font-weight: 750;
+  background: linear-gradient(180deg, rgba(214, 246, 240, 0.3), rgba(169, 228, 218, 0.08));
+}
+.home .segments button.choisi::after {
+  inset: 0;
+  --l: linear-gradient(var(--ligne), var(--ligne));
+  background:
+    var(--l) 0 0 / 12px 2px no-repeat,
+    var(--l) 0 0 / 2px 12px no-repeat,
+    var(--l) 100% 100% / 12px 2px no-repeat,
+    var(--l) 100% 100% / 2px 12px no-repeat;
+}
+/* A choice imposed by the mode sits behind wire mesh. */
+.home .segments.fige {
+  opacity: 0.62;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 5px);
+}
+
+/* Small state ball (chosen, equipped, done). */
+.home .bille {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: radial-gradient(circle at 35% 30%, #effc8a, var(--feutre) 55%, #9ab81c);
+  box-shadow: 0 0 8px rgba(212, 240, 60, 0.55);
+}
+.home .chev {
+  width: 8px;
+  height: 11px;
+}
+
+/* =====================================================================================
+   Lobby
+   ===================================================================================== */
+.home .mur.gauche {
+  left: var(--sl);
+  top: calc(var(--barre-h) + var(--safe-t) + 16px);
+  width: clamp(180px, 22vw, 188px);
+}
+.home .vitre.carte {
+  padding: 10px 14px;
+  width: 100%;
+}
+.home .rang {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.home .defi .nom {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-top: 6px;
+  white-space: nowrap;
+}
+.home .defi .titre {
+  font-size: 14px;
+}
+.home .defi .pied {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.home .etat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--txt-2);
+  white-space: nowrap;
+}
+.home .etat .cercle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px rgba(245, 247, 248, 0.7);
+}
+.home .etat .coche {
+  width: 16px;
+  height: 16px;
+}
+.home .defi.fait .etat {
+  color: var(--feutre);
+}
+.home .defi.fait .gain b {
+  color: var(--txt-3);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+.home .aller,
+.home .changer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-stretch: 118%;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.home .aller .chev,
+.home .changer .chev {
+  width: 7px;
+  height: 9px;
+}
+/* Tournament: three rounds joined by a court line. */
+.home .tours {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 10px -6px 0;
+}
+.home .tours::before {
+  content: '';
+  position: absolute;
+  left: 16.66%;
+  right: 16.66%;
+  top: 7px;
+  height: 2px;
+  background: rgba(245, 247, 248, 0.28);
+}
+.home .tours::after {
+  content: '';
+  position: absolute;
+  left: 16.66%;
+  width: calc(var(--fait, 0) * 33.33%);
+  top: 7px;
+  height: 2px;
+  background: var(--ligne);
+}
+.home .tour {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--txt-3);
+}
+.home .tour i {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--nuit-2);
+  box-shadow: inset 0 0 0 2px rgba(245, 247, 248, 0.34);
+  display: grid;
+  place-items: center;
+}
+.home .tour.gagne {
+  color: var(--txt-2);
+}
+.home .tour.gagne i {
+  background: radial-gradient(circle at 35% 30%, #effc8a, var(--feutre) 55%, #9ab81c);
+  box-shadow: 0 0 8px rgba(212, 240, 60, 0.5);
+}
+.home .tour.gagne i svg {
+  width: 9px;
+  height: 9px;
+}
+.home .tour.encours {
+  color: var(--txt);
+  font-weight: 750;
+}
+.home .tour.encours i {
+  box-shadow: inset 0 0 0 2px var(--ligne), 0 0 0 3px rgba(245, 247, 248, 0.18);
+}
+.home .tour.encours i::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--feutre);
+}
+.home .vitre.enligne {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.home .enligne .picto {
+  width: 26px;
+  height: 26px;
+}
+.home .enligne .txt {
+  display: block;
+}
+.home .enligne .titre {
+  display: block;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.home .enligne .detail {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.home .enligne .chev {
+  margin-left: auto;
+}
+
+/* Right wall: the mode, and the ball to play, above the hosting badge. */
+.home .mur.droite {
+  right: var(--sr);
+  bottom: calc(var(--badge-h) + 8px);
+  width: clamp(134px, 20.6vw, 178px);
+  gap: 10px;
+}
+.home .mur.droite::before,
+.home .mur.droite::after {
+  bottom: 62px;
+}
+.home .vitre.mode {
+  padding: 10px 13px;
+  width: 100%;
+}
+.home .mode .titre {
+  display: block;
+  font-size: 14px;
+  line-height: 1.14;
+  margin-top: 6px;
+}
+.home .mode .regles {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--txt-2);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.home .mode .regles b {
+  color: var(--txt);
+  font-weight: 650;
+}
+.home .mode .regles i {
+  display: inline-block;
+  width: 1px;
+  height: 9px;
+  background: rgba(245, 247, 248, 0.45);
+  margin: 0 7px;
+  vertical-align: -1px;
+}
+.home .mode .gainligne {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 9px;
+  padding-top: 8px;
+  box-shadow: inset 0 1px 0 rgba(245, 247, 248, 0.2);
+}
+.home .mur.droite .balle {
+  margin: 0 -4px;
+}
+
+/* The team on court: name tags like the callouts of a plan. */
+.home .repere {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  margin-top: -13px;
+  padding: 0 9px 0 7px;
+  font-size: 11px;
+  font-stretch: 125%;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: rgba(8, 13, 23, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(169, 228, 218, 0.34), inset 0 2px 0 rgba(214, 246, 240, 0.4);
+  pointer-events: none;
+  will-change: transform;
+}
+.home .repere small {
+  font-size: 11px;
+  font-stretch: 100%;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  color: var(--txt-2);
+}
+.home .repere::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1px;
+  height: 9px;
+  margin-left: -0.5px;
+  background: var(--ligne);
+}
+.home .repere::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--ligne);
+  box-shadow: 0 0 0 2px rgba(7, 11, 19, 0.45);
+}
+.home .repere .ia {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--acier-1);
+}
+
+/* =====================================================================================
+   Mode picker
+   ===================================================================================== */
+.home .mur.modes {
+  left: 36.6vw;
+  right: var(--sr);
+  top: calc(var(--barre-h) + var(--safe-t) + 14px);
+  bottom: var(--sb);
+  gap: 8px;
+}
+.home .reglages {
+  display: flex;
+  gap: 8px;
+}
+.home .groupe {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.home .groupe.format {
+  flex: 4;
+}
+.home .groupe.difficulte {
+  flex: 5;
+}
+.home .groupe .sur {
+  padding-left: 2px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+.home .grille {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 8px;
+}
+.home .grille.deux {
+  grid-template-columns: repeat(2, 1fr);
+}
+.home .carte-mode {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 11px 13px 9px 14px;
+  min-width: 0;
+  min-height: 0;
+}
+.home .carte-mode .tete {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+.home .carte-mode .titre {
+  font-size: 12.5px;
+  line-height: 1.15;
+}
+.home .carte-mode .tete .bille {
+  margin-top: 3px;
+  margin-right: 8px;
+  display: none;
+}
+.home .carte-mode.choisi .tete .bille,
+.home .carte-mode.classe .tete .bille {
+  display: block;
+}
+.home .trois {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 3px 8px 0 0;
+}
+.home .trois i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px rgba(245, 247, 248, 0.4);
+}
+.home .trois i.g {
+  background: var(--feutre);
+  box-shadow: none;
+}
+.home .trois i.c {
+  box-shadow: inset 0 0 0 1.5px var(--ligne);
+  background: radial-gradient(circle, var(--feutre) 0 2px, transparent 2.4px);
+}
+.home .carte-mode .bas {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px;
+}
+.home .signe {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  min-width: 0;
+}
+/* The number painted on the glass. */
+.home .num {
+  font-size: 36px;
+  line-height: 0.82;
+  font-stretch: 125%;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--txt);
+}
+.home .unite {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--txt-2);
+  font-weight: 500;
+  padding-bottom: 1px;
+}
+.home .signe .picto {
+  width: 30px;
+  height: 30px;
+  margin-bottom: -1px;
+}
+.home .pied-modes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 2px 0 13px;
+  /* The hosting badge takes the corner: stop before it. */
+  margin-right: calc(var(--badge-l) - var(--sr) + 6px);
+}
+.home .resume {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 11.5px;
+  line-height: 1.2;
+  color: var(--txt-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+.home .pied-modes .victoire {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.home .pied-modes .balle {
+  flex: none;
+  min-width: 118px;
+  margin: 0 2px;
+}
+
+/* =====================================================================================
+   Locker and shop
+   ===================================================================================== */
+.home .mur.vestiaire {
+  flex-direction: row;
+  gap: 0;
+}
+.home .casiers {
+  flex: none;
+  width: 118px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.home .casier {
+  position: relative;
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 12px 9px 13px;
+  display: flex;
+  flex-direction: column;
+}
+.home .casier .sur {
+  font-size: 11px;
+  letter-spacing: 0.11em;
+}
+.home .casier .nom {
+  margin-top: 3px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--txt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 26px);
+}
+.home .casier .rarete {
+  margin-top: auto;
+  padding-bottom: 2px;
+}
+.home .casier .mini {
+  position: absolute;
+  right: 11px;
+  bottom: 10px;
+  height: 24px;
+  width: auto;
+}
+.home .casier .mini.haute {
+  height: 38px;
+  bottom: 9px;
+}
+.home .casier.choisi .sur {
+  color: var(--txt);
+}
+.home .rayon {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.home .rayon-tete {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 16px;
+  padding: 0 2px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+.home .rayon-tete .sur {
+  color: var(--txt);
+  font-weight: 700;
+}
+.home .rayon-tete small {
+  font-size: 11px;
+  color: var(--txt-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home .rayon-tete small b {
+  color: var(--txt);
+  font-variant-numeric: tabular-nums;
+}
+/* The shelf: locker doors, tall and narrow; it slides sideways when there are many. */
+.home .portes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  touch-action: pan-x;
+  scrollbar-width: none;
+  padding: 3px;
+  margin: -3px;
+}
+.home .portes::-webkit-scrollbar {
+  display: none;
+}
+.home .porte {
+  flex: 0 0 calc((100% - 20px) / 5);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 13px 6px 10px;
+  box-shadow:
+    inset 0 0 0 1px rgba(169, 228, 218, 0.34),
+    inset 0 0 0 3px rgba(169, 228, 218, 0.055),
+    inset 0 3px 0 var(--r),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 12px 26px rgba(0, 0, 0, 0.34);
+}
+.home .porte.choisi {
+  box-shadow:
+    inset 0 0 0 1px rgba(245, 247, 248, 0.62),
+    inset 0 0 0 3px rgba(169, 228, 218, 0.09),
+    inset 0 3px 0 var(--r),
+    0 12px 26px rgba(0, 0, 0, 0.34),
+    0 0 22px rgba(169, 228, 218, 0.16);
+}
+.home .porte .marque {
+  height: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--feutre);
+  white-space: nowrap;
+}
+.home .porte .marque .bille {
+  width: 7px;
+  height: 7px;
+}
+.home .porte .art {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin: 3px 0 7px;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.5));
+}
+.home .porte .titre {
+  font-size: 11.5px;
+  font-stretch: 108%;
+  line-height: 1.12;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home .porte .rarete {
+  margin-top: 5px;
+}
+.home .porte .ligne3 {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--r);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.home .porte .ligne3.prix {
+  color: var(--txt);
+  font-weight: 700;
+  font-stretch: 112%;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+.home .porte .ligne3.prix .piece {
+  width: 12px;
+  height: 12px;
+}
+.home .porte .ligne3.acquis {
+  color: var(--txt-3);
+}
+/* Not yours yet: behind the wire mesh. */
+.home .porte.grille > * {
+  opacity: 0.66;
+}
+.home .porte.grille .ligne3 {
+  opacity: 1;
+}
+.home .porte.grille {
+  background:
+    repeating-linear-gradient(0deg, rgba(211, 217, 224, 0.2) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(90deg, rgba(211, 217, 224, 0.2) 0 1px, transparent 1px 7px),
+    rgba(8, 14, 25, 0.82);
+}
+/* The chosen item and what can be done with it. */
+.home .fiche {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 2px 0 12px;
+  /* Never slide under the hosting badge. */
+  margin-right: max(0px, calc(var(--badge-l) - 34.4vw + 8px));
+}
+.home .fiche .prix {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 15px;
+  font-stretch: 125%;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.home .fiche .prix.manque {
+  font-size: 11.5px;
+  font-stretch: 100%;
+  font-weight: 600;
+  color: var(--txt-2);
+  padding-right: 10px;
+}
+.home .fiche .deja {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 12px;
+  font-size: 11.5px;
+  font-stretch: 118%;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--feutre);
+  white-space: nowrap;
+}
+.home .fiche .qui {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.home .fiche .l1 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.home .fiche .titre {
+  font-size: 14px;
+}
+.home .fiche .l1 .detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home .fiche .balle {
+  flex: none;
+  min-width: 112px;
+  margin: 0 2px;
+}
+
+/* =====================================================================================
+   Online
+   ===================================================================================== */
+.home .ligne .grille {
+  flex: 1;
+}
+.home .carte-mode.file .unite {
+  font-size: 11.5px;
+}
+.home .inviter {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 8px 10px 9px 12px;
+  margin-right: max(0px, calc(var(--badge-l) - 34.4vw + 8px));
+}
+.home .inviter .col {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.home .inviter .join {
+  flex: 1;
+}
+.home .actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.home .inviter .verre-btn {
+  padding: 0 10px;
+}
+.home .inviter input {
+  flex: 1 0 78px;
+  min-width: 0;
+  width: 78px;
+  height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(8, 13, 23, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(169, 228, 218, 0.4);
+  color: var(--txt);
+  font: 700 15px/1 var(--ff);
+  font-stretch: 125%;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.home .inviter input::placeholder {
+  color: var(--txt-3);
+}
+.home .verre-btn.classement {
+  width: 44px;
+  padding: 0;
+  flex: none;
+}
+.home .attente {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 9px;
+  padding: 16px 20px;
+}
+.home .attente h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.home .attente p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--txt);
+}
+.home .attente .hint,
+.home .board-wrap .hint {
+  font-size: 11.5px;
+  color: var(--txt-2);
+  max-width: 44ch;
+}
+.home .pulse {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(212, 240, 60, 0.25);
+  border-top-color: var(--feutre);
+  animation: tourne 0.9s linear infinite;
+}
+@keyframes tourne {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.home .room-code {
+  display: flex;
+  gap: 6px;
+}
+.home .room-code span {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 50px;
+  background: var(--ligne);
+  color: var(--nuit);
+  font: 800 26px/1 var(--ff);
+  font-stretch: 125%;
+}
+.home .board-tabs {
+  flex: none;
+}
+.home .board-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  touch-action: pan-y;
+  padding: 6px 12px;
+}
+.home .board {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.home .board li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  font-size: 12.5px;
+  box-shadow: inset 0 -1px 0 rgba(245, 247, 248, 0.14);
+}
+.home .board li:last-child {
+  box-shadow: none;
+}
+.home .board .rank {
+  width: 22px;
+  font-stretch: 125%;
+  font-weight: 700;
+  color: var(--txt-2);
+  font-variant-numeric: tabular-nums;
+}
+.home .board .who {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+}
+.home .board .wl {
+  color: var(--txt-2);
+  font-size: 11.5px;
+}
+.home .board b {
+  font-stretch: 125%;
+  font-variant-numeric: tabular-nums;
+  color: var(--feutre);
+}
+
+/* =====================================================================================
+   Career
+   ===================================================================================== */
+.home .fiche-joueur {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+}
+.home .anneau.grand {
+  width: 60px;
+  height: 60px;
+}
+.home .anneau.grand circle {
+  stroke-width: 3.4;
+}
+.home .anneau.grand b {
+  font-size: 22px;
+}
+.home .fiche-joueur .qui {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.home .fiche-joueur small {
+  font-size: 11.5px;
+  color: var(--txt-2);
+  font-variant-numeric: tabular-nums;
+}
+.home .name-field input {
+  width: 100%;
+  max-width: 230px;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(8, 13, 23, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(169, 228, 218, 0.4);
+  color: var(--txt);
+  font: 700 16px/1 var(--ff);
+  font-stretch: 120%;
+  letter-spacing: 0.03em;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.home .trophees {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 22px;
+  font-stretch: 125%;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+}
+.home .trophees svg {
+  width: 24px;
+  height: 24px;
+  color: var(--feutre);
+}
+.home .stats {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 6px;
+}
+.home .stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10px 11px 9px;
+  min-width: 0;
+  min-height: 0;
+}
+.home .stat .num {
+  font-size: 26px;
+  white-space: nowrap;
+}
+.home .stat .sur {
+  font-size: 11px;
+  font-stretch: 104%;
+  letter-spacing: 0.05em;
+  white-space: normal;
+  line-height: 1.15;
+}
+
+/* =====================================================================================
+   Settings
+   ===================================================================================== */
+.home .champs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 22px;
+  align-content: center;
+  padding: 16px 18px;
+  flex: 1;
+  min-height: 0;
+}
+.home .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--txt-2);
+}
+.home .field span {
+  display: flex;
+  justify-content: space-between;
+  color: var(--txt-2);
+}
+.home .field b {
+  color: var(--txt);
+  font-variant-numeric: tabular-nums;
+}
+.home .field input[type='range'] {
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  accent-color: var(--feutre);
+}
+.home .field select {
+  height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(8, 13, 23, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(169, 228, 218, 0.4);
+  color: var(--txt);
+  font: 600 12.5px/1 var(--ff);
+}
+.home .toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 12.5px;
+  color: var(--txt);
+}
+.home .toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.home .track {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 22px;
+  background: rgba(8, 13, 23, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(169, 228, 218, 0.4);
+}
+.home .track::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--acier-3);
+  transition: transform 0.15s ease;
+}
+.home .toggle input:checked + .track {
+  box-shadow: inset 0 0 0 1.5px var(--ligne);
+}
+.home .toggle input:checked + .track::after {
+  transform: translateX(18px);
+  background: radial-gradient(circle at 35% 30%, #effc8a, var(--feutre) 55%, #9ab81c);
+  box-shadow: 0 0 8px rgba(212, 240, 60, 0.55);
+}
+.home .toggle input:focus-visible + .track {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.home .reglages-jeu > .actions {
+  margin-right: max(0px, calc(var(--badge-l) - 34.4vw + 8px));
+}
+
+/* =====================================================================================
+   Panels over the match: pause, end of match, help, installation
+   ===================================================================================== */
+.menu {
+  font-family: var(--ff);
+  background: rgba(7, 11, 19, 0.6);
+}
+.menu .panel {
+  border: 0;
+  border-radius: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  padding: 20px 24px 18px;
+}
+.menu .panel h1,
+.menu .panel h2 {
+  font-family: var(--ff);
+  font-style: normal;
+  font-stretch: 122%;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.menu .primary {
+  width: 100%;
+  border: 0;
+  padding: 0 24px;
+  height: 52px;
+  border-radius: 26px;
+  font-size: 17px;
+  font-style: normal;
+}
+.menu .row {
+  flex-wrap: wrap;
+}
+.menu .row button {
+  border: 0;
+  flex: 1 1 auto;
+}
+.menu .result-kicker {
+  font-size: 11px;
+  font-stretch: 125%;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--txt-2);
+}
+.menu .result-title {
+  margin: 4px 0 6px;
+  font-size: 30px;
+  font-stretch: 125%;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--feutre);
+}
+.menu .result-title.lost {
+  color: var(--txt);
+}
+.menu .gains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+.menu .gain {
+  padding: 7px 11px;
+  font-size: 12.5px;
+  color: var(--txt);
+  background: rgba(169, 228, 218, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(169, 228, 218, 0.34);
+}
+.menu .gain b {
+  font-stretch: 125%;
+  font-variant-numeric: tabular-nums;
+}
+.menu .gain svg {
+  width: 16px;
+  height: 16px;
+}
+.menu .result-notes {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--txt-2);
+}
+
+/* =====================================================================================
+   Small screens
+   ===================================================================================== */
+@media (max-width: 720px) {
+  :root {
+    --barre-h: 46px;
+  }
+  .home .onglet {
+    padding: 3px 9px 0;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    font-stretch: 118%;
+  }
+  .home .profil {
+    padding: 0 10px 0 2px;
+  }
+  .home .profil-t {
+    display: none;
+  }
+  .home .bourse {
+    padding: 0 6px 0 10px;
+    font-size: 13px;
+  }
+  .home .fil .onglet:not(.actif) {
+    display: none;
+  }
+  .home .mur.gauche {
+    top: calc(var(--barre-h) + var(--safe-t) + 14px);
+  }
+  .home .mode .titre {
+    font-stretch: 112%;
+  }
+  .home .vitre.mode {
+    padding: 10px 11px;
+  }
+  .home .changer span {
+    display: none;
+  }
+  .home .mode .regles {
+    font-size: 11px;
+  }
+  .home .mode .regles i {
+    margin: 0 5px;
+  }
+  .home .mode .gain b {
+    font-size: 14px;
+  }
+  .home .mur.droite .balle {
+    height: 52px;
+    border-radius: 26px;
+    font-size: 18px;
+    letter-spacing: 0.1em;
+    text-indent: 0.1em;
+  }
+  .home .mur.droite::before,
+  .home .mur.droite::after {
+    bottom: 58px;
+  }
+  .home .mur.modes {
+    left: 35.5vw;
+    top: calc(var(--barre-h) + var(--safe-t) + 12px);
+    gap: 7px;
+  }
+  .home .grille {
+    gap: 7px;
+  }
+  .home .carte-mode {
+    padding: 10px 11px 8px 12px;
+  }
+  .home .num {
+    font-size: 32px;
+  }
+  .home .segments button {
+    padding: 0 5px;
+    font-stretch: 104%;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+  }
+  .home .pied-modes {
+    gap: 8px;
+    padding-left: 11px;
+  }
+  .home .resume {
+    display: none;
+  }
+  .home .pied-modes .balle {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    letter-spacing: 0.09em;
+    text-indent: 0.09em;
+    padding: 0 10px;
+  }
+  .home .carte-mode .titre {
+    font-size: 12px;
+    font-stretch: 106%;
+    letter-spacing: 0.02em;
+  }
+  .home .mur.large {
+    right: 31.4vw;
+    top: calc(var(--barre-h) + var(--safe-t) + 12px);
+  }
+  .home .casiers {
+    width: 108px;
+  }
+  .home .casier {
+    padding: 9px 10px 8px 11px;
+  }
+  .home .casier .mini {
+    right: 10px;
+    bottom: 9px;
+    height: 20px;
+  }
+  .home .casier .mini.haute {
+    height: 34px;
+    bottom: 8px;
+  }
+  .home .porte {
+    flex-basis: calc((100% - 20px) / 4.42);
+  }
+  .home .fiche,
+  .home .inviter,
+  .home .reglages-jeu > .actions {
+    margin-right: max(0px, calc(var(--badge-l) - 31.4vw + 8px));
+  }
+  .home .fiche {
+    padding-left: 10px;
+    gap: 8px;
+  }
+  .home .fiche .l1 .detail {
+    display: none;
+  }
+  .home .fiche .balle {
+    min-width: 100px;
+    font-size: 13px;
+    letter-spacing: 0.09em;
+    text-indent: 0.09em;
+    padding: 0 14px;
+  }
+  .home .stat .num {
+    font-size: 21px;
+  }
+  .home .verre-btn {
+    padding: 0 9px;
+    font-stretch: 106%;
+    letter-spacing: 0.04em;
+  }
+  .home .inviter {
+    gap: 7px;
+    padding-left: 9px;
+  }
+}
+@media (max-width: 650px) {
+  .home .onglet {
+    padding: 3px 7px 0;
+    letter-spacing: 0.06em;
+    font-stretch: 112%;
+  }
+}
+/* Very low screens (a phone browser with its bars showing). */
+@media (max-height: 350px) {
+  .home .groupe .sur {
+    display: none;
+  }
+  .home .carte-mode {
+    padding: 7px 11px 6px 12px;
+  }
+  .home .num {
+    font-size: 25px;
+  }
+  .home .signe .picto {
+    width: 22px;
+    height: 22px;
+  }
+  .home .unite {
+    font-size: 11px;
+    line-height: 1.1;
+  }
+  .home .unite br {
+    display: none;
+  }
+  .home .mur.gauche {
+    top: calc(var(--barre-h) + var(--safe-t) + 10px);
+  }
+  .home .vitre.carte {
+    padding: 7px 14px;
+  }
+  .home .champs {
+    padding: 6px 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home .pulse {
+    animation-duration: 3s;
+  }
+}

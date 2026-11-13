@@ -136,6 +136,8 @@ export class Game {
   private pendingAnnounce: { at: number; text: string } | null = null;
   private opts: GameOptions;
   private ballPos = { x: 0, y: 1, z: 0 };
+  /** Lobby: is the partner on stage (doubles)? */
+  private lobbyPartner = true;
   private tmp = new THREE.Vector3();
   private mode: ModeId = 'quick';
   /** Assist level imposed by the current mode, if any. */
@@ -174,6 +176,9 @@ export class Game {
       onSettingsChanged: () => this.applySettings(),
       onLoadout: (loadout) => this.applyLoadout(loadout),
       onTab: (tab) => this.frameHero(tab),
+      onFormat: (format) => {
+        this.lobbyPartner = format === 'double';
+      },
       onHelp: () => {
         this.home.show(false);
         this.menu.show('help', { inMatch: false });
@@ -223,7 +228,8 @@ export class Game {
 
     // Home screen: the four players stand on court, the camera frames your character.
     this.sim = this.makeSim(false);
-    this.camera.hero = { zoom: 1 };
+    this.stageLobby();
+    this.camera.hero = { zoom: 1.25, shift: 0 };
     this.camera.setBaseFov(this.stage.camera.fov);
     this.applyLoadout(this.profile.equipped);
     this.applySettings();
@@ -296,10 +302,34 @@ export class Game {
     this.shown = { ...loadout };
   }
 
-  /** Home camera: closer in the shop and the locker room, wider elsewhere. */
+  /**
+   * Home camera. In the lobby the team stands in the middle of the picture; the other screens
+   * have a wall of glass on one side, so the player moves to the free side.
+   */
   private frameHero(tab: HomeTab): void {
-    const zoom = tab === 'shop' || tab === 'locker' ? 0.86 : tab === 'play' ? 1 : 1.12;
-    if (this.camera.hero) this.camera.hero.zoom = zoom;
+    if (!this.camera.hero) return;
+    const frame = tab === 'play' ? { zoom: 1.25, shift: 0 } : tab === 'modes' ? { zoom: 0.95, shift: -0.42 } : { zoom: 1, shift: 0.5 };
+    this.camera.hero.zoom = frame.zoom;
+    this.camera.hero.shift = frame.shift;
+  }
+
+  /** Puts the team on stage for the lobby: the partner stands just behind the player. */
+  private stageLobby(): void {
+    const p = this.sim.players;
+    p[1].place(p[0].x - 1.25, p[0].z + 0.55);
+  }
+
+  /** Name tags of the lobby follow the heads of the two players. */
+  private updateLobbyTags(): void {
+    if (!this.home.visible) return;
+    const w = this.opts.canvas.clientWidth;
+    const h = this.opts.canvas.clientHeight;
+    const at = (i: number) => {
+      const p = this.sim.players[i];
+      const pt = this.tmp.set(p.x, 1.75, p.z).project(this.stage.camera);
+      return { x: (pt.x * 0.5 + 0.5) * w, y: (-pt.y * 0.5 + 0.5) * h };
+    };
+    this.home.setAnchors([at(0), this.lobbyPartner ? at(1) : null]);
   }
 
   showHome(): void {
@@ -428,7 +458,7 @@ export class Game {
     this.playing = false;
     this.hud.setPrompt(null);
     const coin =
-      '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#f6c93a"/><circle cx="10" cy="10" r="6.2" fill="none" stroke="#b8860b" stroke-width="1.4"/></svg>';
+      '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.2" fill="#c9d0d8" stroke="#5e6977" stroke-width="1"/><circle cx="8" cy="8" r="5" fill="none" stroke="#7b8592" stroke-width=".8"/><path d="M3.4 5.2c2.6 1.2 2.6 4.4 0 5.6M12.600 5.200c-2.600 1.200-2.600 4.400 0 5.600" fill="none" stroke="#49525e" stroke-width="1.1" stroke-linecap="round"/></svg>';
     window.setTimeout(
       () => {
         this.hud.clearBanner();
@@ -572,8 +602,9 @@ export class Game {
     this.hud.show(false);
     this.hud.setPrompt(null);
     this.sim = this.makeSim(false);
+    this.stageLobby();
     this.camera.orbit = false;
-    this.camera.hero = { zoom: 1 };
+    this.camera.hero = { zoom: 1.25, shift: 0 };
     this.camera.focus = 0;
     this.timeScale = 1;
     this.camera.snap(this.stage.camera, this.sim.players[0]);
@@ -627,11 +658,14 @@ export class Game {
       const live = this.sim.phase === 'rally' || this.sim.phase === 'serve_motion';
       for (let i = 0; i < 4; i++) {
         const p = this.sim.players[i];
-        this.characters[i].group.visible = p.active;
+        // In the lobby only your team is on stage, and the partner only in doubles.
+        const staged = this.playing || !this.home.visible || i === 0 || (i === 1 && this.lobbyPartner);
+        this.characters[i].group.visible = p.active && staged;
         if (p.active) this.characters[i].update(simDt, p, this.sim.now, this.ballPos, live);
       }
       this.ball.update(b, this.sim.world.ballRotation(), this.stage.camera, this.opts.canvas.clientHeight);
       this.camera.update(this.stage.camera, dt, this.sim.players[0], this.ballPos);
+      this.updateLobbyTags();
       if (this.debugCam) {
         const cam = this.stage.camera;
         cam.position.set(...this.debugCam.pos);
@@ -863,7 +897,7 @@ export class Game {
     const title = mode.id === 'tournament' ? TOURNAMENT_ROUNDS[this.profile.tournamentRound].name : mode.name;
     const r = applyMatch(this.profile, this.summary);
     const coin =
-      '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#f6c93a"/><circle cx="10" cy="10" r="6.2" fill="none" stroke="#b8860b" stroke-width="1.4"/></svg>';
+      '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.2" fill="#c9d0d8" stroke="#5e6977" stroke-width="1"/><circle cx="8" cy="8" r="5" fill="none" stroke="#7b8592" stroke-width=".8"/><path d="M3.4 5.2c2.6 1.2 2.6 4.4 0 5.6M12.600 5.200c-2.600 1.200-2.600 4.400 0 5.600" fill="none" stroke="#49525e" stroke-width="1.1" stroke-linecap="round"/></svg>';
     this.controls.setEnabled(false);
     this.playing = false;
     this.hud.clearBanner();

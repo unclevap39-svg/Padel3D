@@ -8,9 +8,16 @@ deux adversaires sont joués par l'ordinateur.
 - **Physique de la balle** : Rapier (WebAssembly) à 240 Hz — gravité, traînée, effet Magnus
   (lift, slice), rebonds sur le gazon, les vitres, le grillage (irrégulier) et le filet
 - **Règles** : moteur indépendant du rendu, couvert par des tests unitaires
-- **Aucun service payant** : tous les assets sont générés par code ou sous licence CC0
+- **Aucun service payant** : tous les assets sont générés par code ou sous licence libre
+  (CC0 pour le modèle des joueurs, OFL pour la police des menus)
 
 ## Contenu
+
+- **Accueil façon salon** : votre équipe est sur le terrain, au centre de l'écran ; onglets en
+  haut (Jouer, En ligne, Vestiaire, Boutique, Carrière), mode de jeu et bouton JOUER en bas à
+  droite, défi du jour et tournoi à gauche. L'habillage « Verre et acier » reprend le terrain
+  lui-même : vitres boulonnées, poteaux d'acier, lignes blanches, et le jaune de la balle
+  réservé à l'action.
 
 - **Modes de jeu** : match rapide (1 set), match complet (2 sets gagnants), tie-break, tournoi en
   trois tours de difficulté croissante, entraînement, défi du jour.
@@ -134,7 +141,9 @@ src/
   input/     Joystick, boutons de frappe, clavier, vibration
   audio/     Sons synthétisés (Web Audio) et annonce vocale du score
   net/       Jeu en ligne : salon, connexion directe, hôte et invité
-  ui/        Accueil (modes, en ligne, boutique, vestiaire, profil, réglages), HUD, menus
+  ui/        Accueil façon salon (jouer, modes, en ligne, vestiaire, boutique, carrière,
+             réglages), HUD, panneaux de pause et de fin de match ; lobby.css porte l'identité
+             visuelle « Verre et acier »
 server/      Logique du salon en ligne (testable sans réseau)
 netlify/     Fonction serveur du salon
 tests/       Vitest : règles, physique, matchs complets, jouabilité (visée, jauge, service),
@@ -173,4 +182,6 @@ qui permet de dérouler des matchs entiers en accéléré dans les tests.
 - Modèle des joueurs : données [MakeHuman](http://www.makehumancommunity.org) (maillage, squelette,
   vêtements, textures), **CC0 1.0** — détail des sources dans `tools/README.md`.
 - Textures du terrain, sons, icônes, environnement : générés par code.
+- Police des menus : [Archivo](https://github.com/Omnibus-Type/Archivo) (Omnibus-Type),
+  **SIL Open Font License 1.1**, embarquée dans le jeu (`src/ui/fonts/`), aucun appel externe.
 - Bibliothèques : three.js (MIT), Rapier (Apache-2.0), décodeur Draco (Apache-2.0).
