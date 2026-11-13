@@ -6,7 +6,23 @@
 import type { MatchConfig } from '../rules/scoring';
 import type { Difficulty } from './types';
 
-export type ItemKind = 'racket' | 'outfit' | 'court' | 'ball';
+export type ItemKind = 'character' | 'racket' | 'outfit' | 'court' | 'ball';
+
+/** Mood of a court: surroundings and light, on top of the colour of the playing surface. */
+export interface CourtTheme {
+  /** Ground around the court. */
+  apron: number;
+  /** Tint of the advertising boards. */
+  boards: number;
+  /** Light bounced from above and from the ground. */
+  hemi: number;
+  ground: number;
+  /** Colour of the floodlights. */
+  key: number;
+  /** Tint of the sky and of the distance haze. */
+  sky: number;
+  fog: number;
+}
 
 export interface ShopItem {
   id: string;
@@ -17,18 +33,43 @@ export interface ShopItem {
   price: number;
   /** Main colour (hex) used both in the game and for the shop swatch. */
   color: number;
-  /** Secondary colour: shorts for outfits, frame for rackets. */
+  /** Secondary colour: shorts for outfits, frame for rackets, skin tone for characters. */
   color2?: number;
+  /** Characters: file of the body under models/chars (none: the base model). */
+  model?: string;
+  /** Rackets: outline of the head and finish of the frame. */
+  shape?: 'round' | 'teardrop' | 'diamond';
+  finish?: 'matte' | 'gloss' | 'metal';
+  /** Courts: surroundings and light. */
+  theme?: CourtTheme;
   rarity: 'standard' | 'rare' | 'épique' | 'légendaire';
 }
 
+const NIGHT: CourtTheme = { apron: 0x16233a, boards: 0xbfbfbf, hemi: 0xb4c8ee, ground: 0x1b3158, key: 0xfff6ea, sky: 0xffffff, fog: 0x0a1220 };
+
 export const CATALOG: ShopItem[] = [
-  // Rackets: accent colour of the face, frame colour.
-  { id: 'racket.volt', kind: 'racket', name: 'Volt', note: 'Carbone noir, arc citron', price: 0, color: 0xd8ef2f, color2: 0x14161a, rarity: 'standard' },
-  { id: 'racket.blaze', kind: 'racket', name: 'Blaze', note: 'Arc orange vif', price: 300, color: 0xff7a1a, color2: 0x14161a, rarity: 'rare' },
-  { id: 'racket.arctic', kind: 'racket', name: 'Arctic', note: 'Cadre blanc, arc cyan', price: 450, color: 0x35d6ff, color2: 0xe8eef2, rarity: 'rare' },
-  { id: 'racket.ruby', kind: 'racket', name: 'Ruby', note: 'Cadre rouge profond', price: 700, color: 0xffffff, color2: 0x9c1422, rarity: 'épique' },
-  { id: 'racket.aurum', kind: 'racket', name: 'Aurum', note: 'Finition or', price: 1500, color: 0xffd34d, color2: 0x2a2108, rarity: 'légendaire' },
+  // Characters, all invented: hair colour, skin tone (for the shop drawing), body file.
+  { id: 'char.leo', kind: 'character', name: 'Léo', note: 'Le titulaire : régulier, sans point faible', price: 0, color: 0x2a1d14, color2: 0xd9a57e, model: 'leo', rarity: 'standard' },
+  { id: 'char.ines', kind: 'character', name: 'Inès', note: 'Vive, queue de cheval, jeu de volée', price: 500, color: 0x6b4423, color2: 0xe3b190, model: 'ines', rarity: 'rare' },
+  { id: 'char.malik', kind: 'character', name: 'Malik', note: 'Grand gabarit, frappe lourde', price: 500, color: 0x14100d, color2: 0x7a4f35, model: 'malik', rarity: 'rare' },
+  { id: 'char.kenji', kind: 'character', name: 'Kenji', note: 'Léger et précis', price: 800, color: 0x0f0f12, color2: 0xdcb48f, model: 'kenji', rarity: 'rare' },
+  { id: 'char.aicha', kind: 'character', name: 'Aïcha', note: 'Athlétique, tresse longue', price: 900, color: 0x1a1210, color2: 0x6e4630, model: 'aicha', rarity: 'épique' },
+  { id: 'char.mei', kind: 'character', name: 'Mei', note: 'Petit format, carré noir, défense de fer', price: 900, color: 0x101014, color2: 0xe6c3a4, model: 'mei', rarity: 'épique' },
+  { id: 'char.hugo', kind: 'character', name: 'Hugo', note: 'Le vétéran aux cheveux gris', price: 1200, color: 0xb9bcc0, color2: 0xd0a58a, model: 'hugo', rarity: 'épique' },
+  { id: 'char.bruno', kind: 'character', name: 'Bruno', note: 'Le mur : trapu, crâne rasé', price: 1200, color: 0x2a2a2a, color2: 0xd3a788, model: 'bruno', rarity: 'épique' },
+  { id: 'char.sofia', kind: 'character', name: 'Sofia', note: 'Grande, carré blond, service puissant', price: 1800, color: 0xe2c98a, color2: 0xe8bb9c, model: 'sofia', rarity: 'légendaire' },
+  { id: 'char.diego', kind: 'character', name: 'Diego', note: 'Le showman aux cheveux longs', price: 1800, color: 0x3a2414, color2: 0xcf9f7f, model: 'diego', rarity: 'légendaire' },
+  // Rackets: accent colour of the face, frame colour, outline of the head, finish.
+  { id: 'racket.volt', kind: 'racket', name: 'Volt', note: 'Ronde, carbone noir, arc citron', price: 0, color: 0xd8ef2f, color2: 0x14161a, shape: 'round', finish: 'gloss', rarity: 'standard' },
+  { id: 'racket.blaze', kind: 'racket', name: 'Blaze', note: 'Goutte d’eau, arc orange vif', price: 300, color: 0xff7a1a, color2: 0x14161a, shape: 'teardrop', finish: 'gloss', rarity: 'rare' },
+  { id: 'racket.onyx', kind: 'racket', name: 'Onyx', note: 'Goutte d’eau, noir mat, arc blanc', price: 350, color: 0xf2f4f5, color2: 0x0c0d10, shape: 'teardrop', finish: 'matte', rarity: 'rare' },
+  { id: 'racket.arctic', kind: 'racket', name: 'Arctic', note: 'Ronde, cadre blanc, arc cyan', price: 450, color: 0x35d6ff, color2: 0xe8eef2, shape: 'round', finish: 'gloss', rarity: 'rare' },
+  { id: 'racket.lagune', kind: 'racket', name: 'Lagune', note: 'Ronde, cadre turquoise', price: 500, color: 0xffffff, color2: 0x0f8f8a, shape: 'round', finish: 'matte', rarity: 'rare' },
+  { id: 'racket.ruby', kind: 'racket', name: 'Ruby', note: 'Diamant, cadre rouge profond', price: 700, color: 0xffffff, color2: 0x9c1422, shape: 'diamond', finish: 'gloss', rarity: 'épique' },
+  { id: 'racket.magma', kind: 'racket', name: 'Magma', note: 'Diamant, noir mat, arc rouge', price: 900, color: 0xff3b2f, color2: 0x15110f, shape: 'diamond', finish: 'matte', rarity: 'épique' },
+  { id: 'racket.chrome', kind: 'racket', name: 'Chrome', note: 'Goutte d’eau, cadre métal poli', price: 1200, color: 0x9fd8ff, color2: 0xc8ced6, shape: 'teardrop', finish: 'metal', rarity: 'épique' },
+  { id: 'racket.aurum', kind: 'racket', name: 'Aurum', note: 'Diamant, finition or', price: 1500, color: 0xffd34d, color2: 0xb8892a, shape: 'diamond', finish: 'metal', rarity: 'légendaire' },
+  { id: 'racket.prisme', kind: 'racket', name: 'Prisme', note: 'Diamant, violet métallisé, arc rose', price: 2000, color: 0xff6ad5, color2: 0x5a2fd0, shape: 'diamond', finish: 'metal', rarity: 'légendaire' },
   // Outfits: shirt and shorts of your pair.
   { id: 'outfit.club', kind: 'outfit', name: 'Club', note: 'Blanc et marine', price: 0, color: 0xf3f5f7, color2: 0x1b2740, rarity: 'standard' },
   { id: 'outfit.ocean', kind: 'outfit', name: 'Océan', note: 'Bleu ciel, short blanc', price: 250, color: 0x4aa8ff, color2: 0xe9edf2, rarity: 'rare' },
@@ -37,11 +78,16 @@ export const CATALOG: ShopItem[] = [
   { id: 'outfit.sunset', kind: 'outfit', name: 'Sunset', note: 'Corail, short violet', price: 900, color: 0xff6b5e, color2: 0x4a2a7a, rarity: 'épique' },
   { id: 'outfit.champion', kind: 'outfit', name: 'Champion', note: 'Or et blanc', price: 2000, color: 0xf2c230, color2: 0xf4f4f0, rarity: 'légendaire' },
   // Courts: colour of the playing surface.
-  { id: 'court.bleu', kind: 'court', name: 'Bleu Tour', note: 'Le classique des circuits pro', price: 0, color: 0x1e63c8, rarity: 'standard' },
-  { id: 'court.vert', kind: 'court', name: 'Vert Club', note: 'Gazon synthétique vert', price: 350, color: 0x1f8a4c, rarity: 'rare' },
-  { id: 'court.violet', kind: 'court', name: 'Violet Arena', note: 'Ambiance salle de gala', price: 800, color: 0x6a3fc4, rarity: 'épique' },
-  { id: 'court.terre', kind: 'court', name: 'Terre Rouge', note: 'Façon terre battue', price: 800, color: 0xb5512c, rarity: 'épique' },
-  { id: 'court.noir', kind: 'court', name: 'Black Edition', note: 'Surface anthracite', price: 1800, color: 0x2c3138, rarity: 'légendaire' },
+  { id: 'court.bleu', kind: 'court', name: 'Bleu Tour', note: 'Le classique des circuits pro, de nuit', price: 0, color: 0x1e63c8, theme: NIGHT, rarity: 'standard' },
+  { id: 'court.vert', kind: 'court', name: 'Vert Club', note: 'Gazon vert, soirée au club', price: 350, color: 0x1f8a4c, theme: { apron: 0x15301f, boards: 0x9fd0a8, hemi: 0xc9e6cf, ground: 0x1c4a2c, key: 0xfff3d6, sky: 0xd9ffe6, fog: 0x0a1a12 }, rarity: 'rare' },
+  { id: 'court.sable', kind: 'court', name: 'Sable', note: 'Club de plage en fin d’après-midi', price: 450, color: 0xc79a4e, theme: { apron: 0x7a5a2c, boards: 0xffe0a8, hemi: 0xffe7c2, ground: 0x8a5a2a, key: 0xffd9a0, sky: 0xffb070, fog: 0x4a3526 }, rarity: 'rare' },
+  { id: 'court.glacier', kind: 'court', name: 'Glacier', note: 'Bleu glace sous lumière froide', price: 600, color: 0x6fb6de, theme: { apron: 0x1c3550, boards: 0xd0f0ff, hemi: 0xd8f0ff, ground: 0x2a5578, key: 0xe8f6ff, sky: 0xbfe4ff, fog: 0x10263a }, rarity: 'rare' },
+  { id: 'court.violet', kind: 'court', name: 'Violet Arena', note: 'Salle de gala, projecteurs mauves', price: 800, color: 0x6a3fc4, theme: { apron: 0x231640, boards: 0xd8b8ff, hemi: 0xd6c2ff, ground: 0x3a2270, key: 0xf4e8ff, sky: 0xc9a8ff, fog: 0x140c26 }, rarity: 'épique' },
+  { id: 'court.terre', kind: 'court', name: 'Terre Rouge', note: 'Façon terre battue au coucher du soleil', price: 800, color: 0xb5512c, theme: { apron: 0x4a2414, boards: 0xffc9a0, hemi: 0xffd2b0, ground: 0x6a2e18, key: 0xffc48a, sky: 0xff8a5a, fog: 0x2a140e }, rarity: 'épique' },
+  { id: 'court.miami', kind: 'court', name: 'Miami', note: 'Rose vif et néons turquoise', price: 1000, color: 0xd9488a, theme: { apron: 0x10343a, boards: 0x7ff0e6, hemi: 0xffc6e6, ground: 0x15565e, key: 0xfff0f6, sky: 0xff9ad0, fog: 0x1a1030 }, rarity: 'épique' },
+  { id: 'court.emeraude', kind: 'court', name: 'Émeraude', note: 'Vert profond et dorures', price: 1200, color: 0x0b5a45, theme: { apron: 0x0c2a22, boards: 0xf2d27a, hemi: 0xe8e2b8, ground: 0x143a2e, key: 0xfff0c8, sky: 0xf2e6b0, fog: 0x08140f }, rarity: 'épique' },
+  { id: 'court.noir', kind: 'court', name: 'Black Edition', note: 'Anthracite sous lumière blanche', price: 1800, color: 0x2c3138, theme: { apron: 0x0b0d10, boards: 0xffffff, hemi: 0xe6ebf2, ground: 0x15181d, key: 0xffffff, sky: 0x8a94a6, fog: 0x05070a }, rarity: 'légendaire' },
+  { id: 'court.neon', kind: 'court', name: 'Néon', note: 'Bleu nuit, lumière cyan électrique', price: 2200, color: 0x121c46, theme: { apron: 0x05081a, boards: 0x6ff6ff, hemi: 0x7fe8ff, ground: 0x10206a, key: 0xcff6ff, sky: 0x5fd8ff, fog: 0x03061a }, rarity: 'légendaire' },
   // Balls.
   { id: 'ball.jaune', kind: 'ball', name: 'Jaune optique', note: 'La balle officielle', price: 0, color: 0xd0e828, rarity: 'standard' },
   { id: 'ball.orange', kind: 'ball', name: 'Orange', note: 'Bien visible de nuit', price: 200, color: 0xff8a1e, rarity: 'rare' },
@@ -127,7 +173,7 @@ export function defaultProfile(): Profile {
     coins: 200,
     xp: 0,
     owned: CATALOG.filter((i) => i.price === 0).map((i) => i.id),
-    equipped: { racket: 'racket.volt', outfit: 'outfit.club', court: 'court.bleu', ball: 'ball.jaune' },
+    equipped: { character: 'char.leo', racket: 'racket.volt', outfit: 'outfit.club', court: 'court.bleu', ball: 'ball.jaune' },
     stats: { matches: 0, wins: 0, pointsWon: 0, pointsLost: 0, aces: 0, winners: 0, bestStreak: 0, streak: 0, trophies: 0, longestRally: 0 },
     tournamentRound: 0,
     dailyDone: '',

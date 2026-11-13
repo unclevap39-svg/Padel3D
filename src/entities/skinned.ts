@@ -12,15 +12,41 @@ export interface PlayerModel {
   rest: Map<string, { head: THREE.Vector3; tail: THREE.Vector3 }>;
   proportions: Proportions;
   darkSkin: THREE.Texture | null;
+  /**
+   * Character files carry only what is their own (body, skin, hair); the textures every
+   * character shares (suit, shoes, eyes) are taken from the base model's materials.
+   */
+  shared?: Map<string, THREE.MeshStandardMaterial>;
+  /** The hair texture is a neutral grey meant to be tinted. */
+  tintedHair?: boolean;
 }
 
-export async function loadPlayerModel(onProgress?: (fraction: number) => void): Promise<PlayerModel> {
+/** The base model: the default player, and the source of the shared textures. */
+export function loadPlayerModel(onProgress?: (fraction: number) => void): Promise<PlayerModel> {
+  return loadModel(`${import.meta.env.BASE_URL}models/player.glb`, onProgress);
+}
+
+/** One character of the roster (`models/chars/<name>.glb`), dressed with the base model's textures. */
+export async function loadCharacterModel(name: string, base: PlayerModel): Promise<PlayerModel> {
+  const model = await loadModel(`${import.meta.env.BASE_URL}models/chars/${name}.glb`);
+  const shared = new Map<string, THREE.MeshStandardMaterial>();
+  base.scene.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+    if (m && m.name) shared.set(m.name, m);
+  });
+  model.shared = shared;
+  model.tintedHair = true;
+  model.darkSkin = null;
+  return model;
+}
+
+async function loadModel(url: string, onProgress?: (fraction: number) => void): Promise<PlayerModel> {
   const draco = new DRACOLoader();
   const base = import.meta.env.BASE_URL;
   draco.setDecoderPath({ js: `${base}draco/draco_wasm_wrapper.js`, wasm: `${base}draco/draco_decoder.wasm` });
   const loader = new GLTFLoader();
   loader.setDRACOLoader(draco);
-  const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/player.glb`, (e) => {
+  const gltf = await loader.loadAsync(url, (e) => {
     if (onProgress && e.total > 0) onProgress(e.loaded / e.total);
   });
   draco.dispose();
@@ -56,6 +82,7 @@ export async function loadPlayerModel(onProgress?: (fraction: number) => void): 
     hand: 0.09,
   };
   let darkSkin: THREE.Texture | null = null;
+  if (url.includes('/chars/')) return { scene, rest, proportions, darkSkin };
   try {
     darkSkin = await new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}models/skin_dark.webp`);
     darkSkin.colorSpace = THREE.SRGBColorSpace;
@@ -155,6 +182,13 @@ export class SkinnedBody implements BodyRenderer {
       const m = (mesh.material as THREE.MeshStandardMaterial).clone();
       mesh.material = m;
       const name = m.name;
+      const from = model.shared?.get(name);
+      if (from && !m.map) {
+        m.map = from.map;
+        m.normalMap = from.normalMap;
+        m.alphaTest = from.alphaTest;
+        m.needsUpdate = true;
+      }
       if (name === 'tee') {
         m.color.setHex(outfit.shirt);
         this.teeMat = m;
@@ -163,7 +197,8 @@ export class SkinnedBody implements BodyRenderer {
         this.shortsMat = m;
       }
       else if (name === 'hair') {
-        m.color.setHex(outfit.hair).multiplyScalar(2.2);
+        // A tinted hair texture is a light grey: the colour is used almost as it is.
+        m.color.setHex(outfit.hair).multiplyScalar(model.tintedHair ? 1.45 : 2.2);
         m.alphaTest = 0.4;
         m.transparent = false;
       } else if (name === 'skin') {

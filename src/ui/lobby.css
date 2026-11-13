@@ -241,7 +241,15 @@ body {
   min-height: 44px;
   min-width: 46px;
   flex: 0 1 auto;
+  /* When the name does not fit it drops to a second line, which is clipped: all or nothing. */
+  flex-wrap: wrap;
+  align-content: flex-start;
+  height: 44px;
+  align-self: center;
   overflow: hidden;
+}
+.home .profil .anneau {
+  margin: 5px 0;
 }
 .home .anneau {
   position: relative;
@@ -278,9 +286,10 @@ body {
 .home .profil-t {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 1px;
-  min-width: 0;
-  overflow: hidden;
+  height: 44px;
+  flex: none;
 }
 .home .profil-t b {
   overflow: hidden;
@@ -1162,7 +1171,8 @@ body {
 }
 .home .casier .sur {
   font-size: 11px;
-  letter-spacing: 0.11em;
+  font-stretch: 110%;
+  letter-spacing: 0.05em;
 }
 .home .casier .nom {
   margin-top: 3px;
@@ -1191,6 +1201,27 @@ body {
 }
 .home .casier.choisi .sur {
   color: var(--txt);
+}
+/* Five slots share the height of the wall: the bolts of rarity give way first. */
+.home .casier {
+  padding-top: 7px;
+  padding-bottom: 6px;
+}
+.home .casier .rarete {
+  display: none;
+}
+.home .casier .mini,
+.home .casier .mini.haute {
+  height: 26px;
+  bottom: 7px;
+}
+@media (min-height: 420px) {
+  .home .casier .rarete {
+    display: inline-flex;
+  }
+  .home .casier .mini.haute {
+    height: 36px;
+  }
 }
 .home .rayon {
   flex: 1;
@@ -1285,13 +1316,11 @@ body {
 }
 .home .porte .titre {
   font-size: 11.5px;
-  font-stretch: 108%;
+  font-stretch: 104%;
+  letter-spacing: 0.01em;
   line-height: 1.12;
   text-align: center;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .home .porte .rarete {
   margin-top: 5px;
@@ -1936,7 +1965,11 @@ body {
     width: 108px;
   }
   .home .casier {
-    padding: 9px 10px 8px 11px;
+    padding: 7px 8px 6px 9px;
+  }
+  .home .casier .sur {
+    font-stretch: 100%;
+    letter-spacing: 0.03em;
   }
   .home .casier .mini {
     right: 10px;

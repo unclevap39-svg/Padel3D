@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Sound } from '../audio/sound';
 import { BallView } from '../entities/ball';
 import { CharacterView, type Outfit } from '../entities/character';
-import { SkinnedBody, loadPlayerModel } from '../entities/skinned';
+import { type PlayerModel, SkinnedBody, loadCharacterModel, loadPlayerModel } from '../entities/skinned';
 import { type Intercept, bestIntercept } from '../ai/intercept';
 import { TouchControls, vibrate } from '../input/touch';
 import { GuestSim } from '../net/guest';
@@ -20,6 +20,7 @@ import { Home, type HomeTab } from '../ui/home';
 import { Hud } from '../ui/hud';
 import { Menu, isMobile } from '../ui/menu';
 import {
+  CATALOG,
   type ItemKind,
   type MatchSummary,
   type ModeId,
@@ -136,6 +137,10 @@ export class Game {
   private pendingAnnounce: { at: number; text: string } | null = null;
   private opts: GameOptions;
   private ballPos = { x: 0, y: 1, z: 0 };
+  /** Character bodies: the base model, the roster files already asked for, who is in each place. */
+  private baseModel: PlayerModel | null = null;
+  private models = new Map<string, Promise<PlayerModel>>();
+  private cast: string[] = ['', '', '', ''];
   /** Lobby: is the partner on stage (doubles)? */
   private lobbyPartner = true;
   private tmp = new THREE.Vector3();
@@ -232,6 +237,7 @@ export class Game {
     this.camera.hero = { zoom: 1.25, shift: 0 };
     this.camera.setBaseFov(this.stage.camera.fov);
     this.applyLoadout(this.profile.equipped);
+    this.castOthers();
     this.applySettings();
 
     window.addEventListener('resize', () => {
@@ -251,14 +257,64 @@ export class Game {
   async loadCharacters(onProgress?: (fraction: number) => void): Promise<boolean> {
     try {
       const model = await loadPlayerModel(onProgress);
+      this.baseModel = model;
       this.characters.forEach((c, i) => {
         c.setBody(new SkinnedBody(model, c.outfit, !!OUTFITS[i].darkSkin), model.proportions);
       });
+      // Now that the shared textures are there, bring in the chosen characters.
+      const want = this.cast.slice();
+      this.cast = ['', '', '', ''];
+      want.forEach((id, i) => id && this.setCharacter(i, id));
       return true;
     } catch (err) {
       console.warn('Modèle de joueur indisponible, mannequins conservés', err);
       return false;
     }
+  }
+
+  /**
+   * Puts a character of the roster in one of the four places. The body is fetched the first
+   * time it is needed; until then (or if it cannot be fetched) the place keeps its current body.
+   */
+  private setCharacter(slot: number, id: string): void {
+    const item = itemById(id);
+    if (item.kind !== 'character' || !item.model || this.cast[slot] === id) return;
+    this.cast[slot] = id;
+    const base = this.baseModel;
+    if (!base) return; // applied once the base model has arrived
+    let pending = this.models.get(item.model);
+    if (!pending) {
+      pending = loadCharacterModel(item.model, base);
+      this.models.set(item.model, pending);
+    }
+    pending
+      .then((model) => {
+        if (this.cast[slot] !== id) return; // another character was chosen meanwhile
+        const c = this.characters[slot];
+        c.outfit = { ...c.outfit, hair: item.color, skin: item.color2 ?? c.outfit.skin };
+        c.setBody(new SkinnedBody(model, c.outfit, false), model.proportions);
+      })
+      .catch((err) => {
+        this.models.delete(item.model!);
+        this.cast[slot] = '';
+        console.warn(`Personnage ${item.name} indisponible`, err);
+      });
+  }
+
+  /**
+   * Chooses who stands in the three other places: different from you and from each other.
+   * `opponent` forces the character of the player across the net (online).
+   */
+  private castOthers(opponent?: string): void {
+    const mine = this.cast[0] || this.profile.equipped.character;
+    const pool = CATALOG.filter((i) => i.kind === 'character' && i.id !== mine && i.id !== opponent).map((i) => i.id);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    this.setCharacter(1, pool[0]);
+    this.setCharacter(2, opponent && itemById(opponent).kind === 'character' ? opponent : pool[1]);
+    this.setCharacter(3, pool[2]);
   }
 
   private initialTier(): QualityTier {
@@ -293,11 +349,19 @@ export class Game {
         this.characters[i].setOutfit({ ...OUTFITS[i], shirt: o.color, shorts: o.color2 ?? OUTFITS[i].shorts });
       }
     }
+    if (this.shown.character !== loadout.character) {
+      this.setCharacter(0, loadout.character);
+      // Nobody else on court wears the same face as you.
+      if (this.cast.indexOf(loadout.character, 1) > 0) this.castOthers(this.net ? this.cast[2] : undefined);
+    }
     if (this.shown.racket !== loadout.racket) {
       const r = itemById(loadout.racket);
-      this.characters[0].setRacket(r.color, r.color2 ?? 0x14161a);
+      this.characters[0].setRacket(r.color, r.color2 ?? 0x14161a, r.shape, r.finish);
     }
-    if (this.shown.court !== loadout.court) this.stage.court.turfMaterial.color.setHex(itemById(loadout.court).color);
+    if (this.shown.court !== loadout.court) {
+      const c = itemById(loadout.court);
+      this.stage.applyCourt(c.color, c.theme);
+    }
     if (this.shown.ball !== loadout.ball) this.ball.setColor(itemById(loadout.ball).color);
     this.shown = { ...loadout };
   }
@@ -356,7 +420,14 @@ export class Game {
     return {
       k: 'hello',
       name: this.profile.name,
-      look: { shirt: outfit.color, shorts: outfit.color2 ?? 0x15171c, racket: racket.color, frame: racket.color2 ?? 0x14161a },
+      look: {
+        shirt: outfit.color,
+        shorts: outfit.color2 ?? 0x15171c,
+        racket: racket.color,
+        frame: racket.color2 ?? 0x14161a,
+        char: e.character,
+        racketId: e.racket,
+      },
       assist: this.settings.assist,
       v: PROTOCOL,
     };
@@ -370,6 +441,7 @@ export class Game {
     this.summary = { mode: this.mode, won: false, pointsWon: 0, pointsLost: 0, aces: 0, winners: 0, longestRally: 0 };
     this.modeAssist = null;
     this.applyLoadout(this.profile.equipped);
+    this.castOthers();
     let host: HostSession | null = null;
     if (info.role === 'host') {
       const sim = new Simulation({
@@ -432,7 +504,11 @@ export class Game {
       const own = dist > 90;
       this.characters[i].setOutfit({ ...OUTFITS[i], shirt: own ? theirs : OUTFITS[i].shirt, shorts: own ? num(look.shorts, OUTFITS[i].shorts) : OUTFITS[i].shorts });
     }
-    this.characters[2].setRacket(num(look.racket, 0xd8ef2f), num(look.frame, 0x14161a));
+    // Shape and finish come from the catalogue, never from the message itself.
+    const theirRacket = typeof look.racketId === 'string' ? CATALOG.find((i) => i.id === look.racketId && i.kind === 'racket') : undefined;
+    this.characters[2].setRacket(num(look.racket, 0xd8ef2f), num(look.frame, 0x14161a), theirRacket?.shape, theirRacket?.finish);
+    const theirChar = typeof look.char === 'string' && CATALOG.some((i) => i.id === look.char && i.kind === 'character') ? look.char : undefined;
+    if (theirChar) this.castOthers(theirChar);
     if (this.net?.host && this.sim instanceof Simulation && typeof msg.assist === 'number') {
       this.sim.config.assistBy = { 2: Math.max(0, Math.min(1, msg.assist)) };
     }
@@ -541,6 +617,7 @@ export class Game {
     this.summary = { mode, won: false, pointsWon: 0, pointsLost: 0, aces: 0, winners: 0, longestRally: 0 };
     this.applyLoadout(this.profile.equipped);
     this.home.show(false);
+    this.castOthers();
     const sim = this.makeSim(true, mode);
     sim.startMatch(firstServer);
     this.sim = sim;

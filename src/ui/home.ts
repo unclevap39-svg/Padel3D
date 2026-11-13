@@ -63,6 +63,7 @@ const TABS: Array<[HomeTab, string]> = [
 ];
 
 const KINDS: Array<[ItemKind, string, string]> = [
+  ['character', 'Personnage', 'Personnages'],
   ['racket', 'Raquette', 'Raquettes'],
   ['outfit', 'Tenue', 'Tenues'],
   ['court', 'Terrain', 'Terrains'],
@@ -95,16 +96,32 @@ const bolts = (rarity: string, withName: boolean): string => {
 };
 
 /** Drawing of an item in its own colours. */
-function itemArt(kind: ItemKind, color: number, color2: number | undefined, cls: string): string {
+function itemArt(kind: ItemKind, color: number, color2: number | undefined, cls: string, shape = 'round', bald = false): string {
   const c = hex(color);
   const c2 = hex(color2 ?? 0x14161a);
+  if (kind === 'character') {
+    // Head and shoulders: skin tone, hair colour.
+    const hair = bald ? '' : `<path d="M13.500 23c-1.500-13 5-19 12.500-19s14 6 12.500 19c-1.500-6-5-9.500-12.500-9.500S15 17 13.500 23z" fill="${c}" stroke="rgba(255,255,255,.3)" stroke-width=".8"/>`;
+    return `<svg class="${cls} haute" viewBox="0 0 52 66" aria-hidden="true">
+      <path d="M4 66c0-13 8-19 22-19s22 6 22 19z" fill="#e9edf2" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>
+      <rect x="21" y="36" width="10" height="13" rx="4" fill="${c2}"/>
+      <ellipse cx="26" cy="24" rx="12" ry="15" fill="${c2}" stroke="rgba(0,0,0,.25)" stroke-width=".8"/>${hair}</svg>`;
+  }
   if (kind === 'racket') {
+    // Outline of the head: round, teardrop (wider towards the top) or diamond.
+    const k = shape === 'teardrop' ? 0.16 : shape === 'diamond' ? 0.3 : 0;
+    const ry = shape === 'diamond' ? 28 : 26.5;
+    let d = '';
+    for (let i = 0; i <= 36; i++) {
+      const t = (i / 36) * Math.PI * 2;
+      d += `${i ? 'L' : 'M'}${(26 + 23.2 * Math.sin(t) * (1 + k * Math.cos(t))).toFixed(1)} ${(28.5 - ry * Math.cos(t)).toFixed(1)}`;
+    }
     return `<svg class="${cls} haute" viewBox="0 0 52 100" aria-hidden="true">
-      <rect x="22.4" y="63" width="7.2" height="32" rx="2" fill="#dfe3e8"/><path d="M22.4 69.500h7.200M22.400 74.500h7.200M22.400 79.500h7.200M22.400 84.500h7.200M22.400 89.500h7.200" stroke="#8d96a2" stroke-width="1"/>
-      <rect x="21.2" y="93" width="9.6" height="5" rx="1.6" fill="#1a212b" stroke="#98a2af" stroke-width=".6"/>
       <path d="M9.500 44L22.400 66h7.200L42.500 44z" fill="${c2}" stroke="rgba(255,255,255,.34)" stroke-width="1.2" stroke-linejoin="round"/>
+      <path d="${d}z" fill="${c2}" stroke="rgba(255,255,255,.42)" stroke-width="1.4"/>
+      <rect x="22.4" y="63" width="7.2" height="32" rx="2" fill="#dfe3e8"/><path d="M22.400 69.500h7.200M22.400 74.500h7.200M22.400 79.500h7.200M22.400 84.500h7.200M22.400 89.500h7.200" stroke="#8d96a2" stroke-width="1"/>
+      <rect x="21.2" y="93" width="9.6" height="5" rx="1.6" fill="#1a212b" stroke="#98a2af" stroke-width=".6"/>
       <path d="M20.600 54.500L26 63.200l5.400-8.700z" fill="#070b13" stroke="rgba(255,255,255,.25)" stroke-width=".7"/>
-      <ellipse cx="26" cy="28.5" rx="23.2" ry="26.5" fill="${c2}" stroke="rgba(255,255,255,.42)" stroke-width="1.4"/>
       <g fill="rgba(128,138,150,.55)"><circle cx="20" cy="14" r="1.25"/><circle cx="26" cy="14" r="1.25"/><circle cx="14" cy="21" r="1.25"/><circle cx="20" cy="21" r="1.25"/><circle cx="26" cy="21" r="1.25"/><circle cx="32" cy="21" r="1.25"/><circle cx="11" cy="28" r="1.25"/><circle cx="17" cy="28" r="1.25"/><circle cx="23" cy="28" r="1.25"/><circle cx="29" cy="28" r="1.25"/><circle cx="14" cy="35" r="1.25"/><circle cx="20" cy="35" r="1.25"/><circle cx="26" cy="35" r="1.25"/><circle cx="32" cy="35" r="1.25"/><circle cx="20" cy="42" r="1.25"/><circle cx="26" cy="42" r="1.25"/></g>
       <path d="M34.500 8.500C46.500 16 46.500 41 34.500 48.500" fill="none" stroke="${c}" stroke-width="4.2" stroke-linecap="round"/></svg>`;
   }
@@ -133,7 +150,7 @@ export class Home {
   private cb: HomeCallbacks;
   private tab: HomeTab = 'play';
   private mode: ModeId;
-  private kind: ItemKind = 'racket';
+  private kind: ItemKind = 'character';
   /** Item highlighted in the shop or locker (tried on, not necessarily owned). */
   private selected: string | null = null;
   private lobby: LobbyState = { kind: 'idle' };
@@ -505,7 +522,7 @@ export class Home {
       const line = ownedOnly ? eq.name : forSale ? `${forSale} en vente` : 'Tout est à vous';
       return `<button class="vitre casier${this.kind === k ? ' choisi' : ''}" data-kind="${k}" role="tab" aria-selected="${this.kind === k}">
         <span class="sur">${label}</span><span class="nom">${line}</span>${ownedOnly ? bolts(eq.rarity, false) : ''}
-        ${itemArt(k, eq.color, eq.color2, 'mini')}</button>`;
+        ${itemArt(k, eq.color, eq.color2, 'mini', eq.shape, eq.model === 'bruno')}</button>`;
     }).join('');
     const doors = items
       .map((i) => {
@@ -519,7 +536,7 @@ export class Home {
             : '<span class="ligne3 acquis">à vous</span>'
           : `<span class="ligne3 prix">${fmt(i.price)}${PIECE}</span>`;
         return `<button class="vitre porte ${r.cls}${i.id === current ? ' choisi' : ''}${owned ? '' : ' grille'}" data-item="${i.id}" role="radio" aria-checked="${i.id === current}">
-          <span class="marque">${mark}</span>${itemArt(i.kind, i.color, i.color2, 'art')}
+          <span class="marque">${mark}</span>${itemArt(i.kind, i.color, i.color2, 'art', i.shape, i.model === 'bruno')}
           <strong class="titre">${i.name}</strong>${bolts(i.rarity, false)}${last}</button>`;
       })
       .join('');

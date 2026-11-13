@@ -34,7 +34,7 @@ export interface HelloMsg {
   k: 'hello';
   name: string;
   /** Shirt, shorts and racket colours, so each side sees the other's look. */
-  look: { shirt: number; shorts: number; racket: number; frame: number };
+  look: { shirt: number; shorts: number; racket: number; frame: number; char?: string; racketId?: string };
   assist?: number;
   /** Version of the controls protocol: 2 = held button (p / r / c messages). Absent on older builds. */
   v?: number;

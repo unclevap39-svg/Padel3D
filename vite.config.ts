@@ -79,7 +79,15 @@ export default defineConfig({
         // Everything is precached on first visit so the game runs with no connection afterwards.
         globPatterns: ['**/*.{js,css,html,png,webp,glb,wasm,json,woff2}'],
         // Three.js also emits its own copies of the Draco decoder; the game uses public/draco.
-        globIgnores: ['assets/draco_*'],
+        // The roster's bodies are fetched when first needed and then kept for offline play.
+        globIgnores: ['assets/draco_*', 'models/chars/*'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.includes('/models/chars/'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'padel3d-characters', expiration: { maxEntries: 30 } },
+          },
+        ],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         clientsClaim: true,

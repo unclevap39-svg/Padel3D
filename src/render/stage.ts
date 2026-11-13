@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { CourtTheme } from '../core/profile';
 import { buildCourt, buildSky, type CourtBuild } from './court';
 
 export type QualityTier = 'low' | 'medium' | 'high';
@@ -61,6 +62,9 @@ export class Stage {
   readonly camera: THREE.PerspectiveCamera;
   readonly court: CourtBuild;
   readonly keyLight: THREE.DirectionalLight;
+  private sky: THREE.Mesh;
+  private hemi: THREE.HemisphereLight;
+  private floods: THREE.DirectionalLight[] = [];
   tier: QualityTier;
   /** Multiplier applied on top of the tier's pixel ratio by the adaptive controller (0.5..1). */
   resolutionScale = 1;
@@ -83,7 +87,8 @@ export class Stage {
     const aniso = Math.min(TIERS[tier].anisotropy, this.renderer.capabilities.getMaxAnisotropy());
     this.court = buildCourt(aniso);
     this.scene.add(this.court.group);
-    this.scene.add(buildSky());
+    this.sky = buildSky();
+    this.scene.add(this.sky);
     this.scene.fog = new THREE.Fog(0x0a1220, 45, 130);
 
     this.scene.environment = buildEnvironment(this.renderer, this.court.floodlights);
@@ -91,7 +96,8 @@ export class Stage {
 
     // Four floodlights: the one behind the camera's right shoulder casts the shadows, the other
     // three fill. A hemisphere light stands in for light bounced around the arena.
-    this.scene.add(new THREE.HemisphereLight(0xb4c8ee, 0x1b3158, 0.8));
+    this.hemi = new THREE.HemisphereLight(0xb4c8ee, 0x1b3158, 0.8);
+    this.scene.add(this.hemi);
     const f = this.court.floodlights;
     this.keyLight = new THREE.DirectionalLight(0xfff6ea, 1.7);
     const fills: THREE.DirectionalLight[] = [];
@@ -103,6 +109,7 @@ export class Stage {
       light.target.position.set(0, 0, 0);
       this.scene.add(light, light.target);
       if (!isKey) fills.push(light);
+      this.floods.push(light);
       void i;
     });
     const sh = this.keyLight.shadow;
@@ -117,6 +124,20 @@ export class Stage {
     sh.radius = 2.5;
     this.applyTier(tier);
     this.resize();
+  }
+
+  /** Colour of the playing surface and mood of its surroundings (shop items). */
+  applyCourt(turf: number, t: CourtTheme | undefined): void {
+    this.court.turfMaterial.color.setHex(turf);
+    if (!t) return;
+    this.court.apronMaterial.color.setHex(t.apron);
+    this.court.boardMaterial.color.setHex(t.boards).multiplyScalar(0.8);
+    this.hemi.color.setHex(t.hemi);
+    this.hemi.groundColor.setHex(t.ground);
+    for (const l of this.floods) l.color.setHex(t.key);
+    // The sky dome is a dark gradient: the tint is pushed above 1 so warm or cold moods show.
+    (this.sky.material as THREE.MeshBasicMaterial).color.setHex(t.sky).multiplyScalar(t.sky === 0xffffff ? 1 : 2.2);
+    (this.scene.fog as THREE.Fog).color.setHex(t.fog);
   }
 
   applyTier(tier: QualityTier): void {

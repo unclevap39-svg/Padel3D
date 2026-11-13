@@ -22,8 +22,13 @@ deux adversaires sont joués par l'ordinateur.
 - **Modes de jeu** : match rapide (1 set), match complet (2 sets gagnants), tie-break, tournoi en
   trois tours de difficulté croissante, entraînement, défi du jour.
 - **Progression** : pièces et expérience gagnées à chaque match, niveaux, statistiques de carrière.
-- **Boutique et vestiaire** : raquettes, tenues, terrains et balles à débloquer avec les pièces
-  gagnées en jouant. Il n'y a aucun achat en argent réel ; tout est enregistré sur l'appareil.
+- **Boutique et vestiaire** : dix personnages, dix raquettes (rondes, goutte d'eau ou diamant,
+  finition mate, brillante ou métal), dix terrains avec leur ambiance lumineuse, des tenues et
+  des balles, à débloquer avec les pièces gagnées en jouant. Il n'y a aucun achat en argent
+  réel ; tout est enregistré sur l'appareil.
+- **Personnages** : tous inventés (aucune personne réelle), construits à partir des données
+  MakeHuman : corps, visage, peau et coiffure diffèrent. Votre partenaire et vos adversaires
+  sont tirés parmi les autres ; en ligne, chacun voit le personnage de l'autre.
 
 ## Jeu en ligne
 
@@ -162,8 +167,10 @@ qui permet de dérouler des matchs entiers en accéléré dans les tests.
   mouvements sont donc générés par code (pas plantés au sol, cinématique inverse, coups calés
   sur le point de contact réel). C'est cohérent et sans glissement des pieds, mais moins naturel
   que de la capture de mouvement.
-- **Personnages** : un seul modèle de corps (MakeHuman, CC0) décliné en deux teintes de peau et
-  deux tenues. Le visage est figé et, de près, le t-shirt peut laisser voir un défaut à l'épaule.
+- **Personnages** : dix corps différents, mais tous portent la même coupe de tenue (seules les
+  couleurs changent) et jouent avec les mêmes animations. Le visage est figé, les cheveux longs
+  sont rigides et, de près, le t-shirt peut laisser voir un défaut à l'épaule. Les personnages
+  n'ont pas de caractéristiques de jeu propres : la différence est visuelle.
 - **Vitres** : transparence, reflets d'environnement et effet de Fresnel, sans réfraction réelle.
 - **Public** : tribunes texturées, pas de spectateurs en 3D.
 - **Textures** : compressées en WebP et non en KTX2 (le décodeur KTX2 aurait pesé plus lourd que

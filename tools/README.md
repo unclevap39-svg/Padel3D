@@ -26,6 +26,20 @@ GitHub, ses fichiers texte viennent de l'archive `v1.3.0` conservée par le prox
 (`proxy.golang.org`), et ses textures PNG du miroir `gitlab.com/fihlatv/makehuman-assets`,
 vérifiées identiques (SHA-256) aux pointeurs LFS de la version `v1.3.0`.
 
+Les dix personnages de la boutique se construisent avec le même script :
+
+```
+node tools/build-character.mjs <dossier de données> --roster public/models/chars
+```
+
+Chaque fichier `public/models/chars/<nom>.glb` ne contient que ce qui est propre au personnage
+(corps, peau, cheveux en gris neutre que le jeu teinte) ; la tenue, les chaussures et les yeux
+réutilisent les textures du modèle de base. La liste (`ROSTER` dans le script) fixe pour chacun
+les morphs MakeHuman (origine, sexe, âge, musculature, corpulence, forme du visage), la taille,
+la coiffure et la texture de peau. Coiffures et peaux utilisées : `hair/{short01..04, bob01,
+bob02, braid01, ponytail01, long01}` et les textures `skins/textures/*_diffuse*.png`, mêmes
+sources et même licence CC0 que ci-dessus.
+
 Ce que fait le script :
 
 1. applique les morphs « homme jeune » (+ 35 % de musculature) au maillage de base ;

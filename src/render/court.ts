@@ -21,6 +21,9 @@ export interface CourtBuild {
   glassMaterial: THREE.MeshStandardMaterial;
   /** Wire mesh of the wall the camera looks through, faded so it does not veil the court. */
   nearFenceMaterial: THREE.MeshStandardMaterial;
+  /** Ground around the court and advertising boards: tinted by the court's mood. */
+  apronMaterial: THREE.MeshStandardMaterial;
+  boardMaterial: THREE.MeshBasicMaterial;
   /** Positions of the floodlight heads, for placing lights. */
   floodlights: THREE.Vector3[];
 }
@@ -450,7 +453,7 @@ export function buildCourt(aniso: number): CourtBuild {
   addBoard(10.5, 0, 29, -Math.PI / 2);
   group.add(new THREE.Mesh(mergeGeometries(boards), boardMat));
 
-  return { group, turfMaterial: turfMat, glassMaterial, nearFenceMaterial, floodlights };
+  return { group, turfMaterial: turfMat, glassMaterial, nearFenceMaterial, apronMaterial: apronMat, boardMaterial: boardMat, floodlights };
 }
 
 /** Night sky dome: deep blue overhead, lighter haze towards the horizon from the stadium lights. */

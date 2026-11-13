@@ -18,9 +18,8 @@ import path from 'node:path';
 import sharp from 'sharp';
 
 const DATA = process.argv[2];
-const OUT = process.argv[3] ?? 'public/models/player.glb';
 if (!DATA) {
-  console.error('usage: node tools/build-character.mjs <makehuman data dir> [out.glb]');
+  console.error('usage: node tools/build-character.mjs <makehuman data dir> [out.glb | --roster]');
   process.exit(1);
 }
 const P = {
@@ -75,11 +74,27 @@ function applyTarget(v, file, weight) {
   }
 }
 
+async function webp(input, size, quality, alpha = false) {
+  let img = sharp(input).resize(size, size, { fit: 'fill' });
+  if (!alpha) img = img.removeAlpha();
+  return img.webp({ quality, alphaQuality: 90, effort: 6 }).toBuffer();
+}
+
+/**
+ * Builds one character. `spec`:
+ *   targets  [[file under makehuman/targets, weight], ...] morphs applied to the base mesh
+ *   scale    overall size (1 = as modelled)
+ *   hair     hair style folder under assets/hair, or null for a shaved head
+ *   skin     file name of the skin texture, without `.png`
+ *   lean     true: leave out the textures every character shares (suit, shoes, eyes) and
+ *            store a neutral grey hair texture the game tints; the game takes the shared
+ *            textures from the base model.
+ */
+async function build(spec, OUT) {
+console.log(`\n== ${spec.id ?? 'player'} -> ${OUT}`);
 const base = parseObj(read(path.join(P.mh, '3dobjs/base.obj')));
-const targets = path.join(P.mh, 'targets/macrodetails');
-applyTarget(base.v, path.join(targets, 'caucasian-male-young.target'), 1);
-// A touch of extra muscle for an athlete's build.
-applyTarget(base.v, path.join(targets, 'universal-male-young-maxmuscle-averageweight.target'), 0.35);
+for (const [file, weight] of spec.targets) applyTarget(base.v, path.join(P.mh, 'targets', file), weight);
+if (spec.scale && spec.scale !== 1) for (const v of base.v) for (let n = 0; n < 3; n++) v[n] *= spec.scale;
 const V = base.v;
 
 // ------------------------------------------------------------------------------------------------
@@ -208,7 +223,7 @@ function fitProxy(dir, name) {
 console.log('fitting proxies');
 const suit = fitProxy(path.join(P.assets, 'clothes/male_casualsuit06'), 'male_casualsuit06');
 const shoes = fitProxy(path.join(P.assets, 'clothes/shoes05'), 'shoes05');
-const hair = fitProxy(path.join(P.assets, 'hair/short02'), 'short02');
+const hair = spec.hair ? fitProxy(path.join(P.assets, `hair/${spec.hair}`), spec.hair) : null;
 const eyes = fitProxy(path.join(P.mh, 'eyes/low-poly'), 'low-poly');
 
 // ------------------------------------------------------------------------------------------------
@@ -265,7 +280,7 @@ function buildPrimitive(positions, weightsOf, uvs, faces, opts = {}) {
 
 // Shorts: the suit's jeans are cut above the knee and the cut ring is flattened into a hem.
 const kneeY = (jointPos(rig.calf_l.head)[1] + jointPos(rig.calf_r.head)[1]) / 2;
-const hemY = kneeY + 0.75; // decimetres: about 7 cm above the knee joint
+const hemY = kneeY + 0.75 * (spec.scale ?? 1); // decimetres: about 7 cm above the knee joint
 // In the suit texture the tee occupies the top of the image, the jeans the bottom.
 const isJeansFace = (f) => f.verts.reduce((s, [, ti]) => s + (1 - suit.vt[ti][1]), 0) / f.verts.length > 0.43;
 const teeFaces = suit.faces.filter((f) => !isJeansFace(f));
@@ -294,19 +309,13 @@ const prims = {
   tee: buildPrimitive(suit.pos, (vi) => suit.weights[vi], suit.vt, teeFaces),
   shorts: buildPrimitive(suit.pos, (vi) => suit.weights[vi], suit.vt, shortsFaces),
   shoes: buildPrimitive(shoes.pos, (vi) => shoes.weights[vi], shoes.vt, shoes.faces),
-  hair: buildPrimitive(hair.pos, (vi) => hair.weights[vi], hair.vt, hair.faces, { bone: boneIndex.get('head') }),
+  ...(hair ? { hair: buildPrimitive(hair.pos, (vi) => hair.weights[vi], hair.vt, hair.faces, { bone: boneIndex.get('head') }) } : {}),
   eyes: buildPrimitive(eyes.pos, (vi) => eyes.weights[vi], eyes.vt, eyes.faces, { bone: boneIndex.get('head') }),
 };
 for (const [k, p] of Object.entries(prims)) console.log(`  ${k}: ${p.position.length / 3} verts, ${p.index.length / 3} tris`);
 
 // ------------------------------------------------------------------------------------------------
 // Textures
-
-async function webp(input, size, quality, alpha = false) {
-  let img = sharp(input).resize(size, size, { fit: 'fill' });
-  if (!alpha) img = img.removeAlpha();
-  return img.webp({ quality, alphaQuality: 90, effort: 6 }).toBuffer();
-}
 
 /**
  * Suit texture: the tee keeps only its shading (the printed logo is blurred away and the
@@ -368,30 +377,32 @@ async function texture(name, bytes) {
 }
 const texDir = P.tex;
 console.log('encoding textures');
-const texSkin = await texture('skin', await webp(path.join(texDir, 'skins/textures/young_lightskinned_male_diffuse.png'), 1024, 80));
-const texSuit = await texture('suit', await suitTexture(path.join(texDir, 'clothes/male_casualsuit06'), 1024));
-const texSuitN = await texture('suit_normal', await webp(path.join(texDir, 'clothes/male_casualsuit06/male_casualsuit06_normal.png'), 512, 85));
-const texShoes = await texture('shoes', await webp(path.join(texDir, 'clothes/shoes05/shoes05_diffuse.png'), 512, 80));
-const texHair = await texture('hair', await webp(path.join(texDir, 'hair/short02/short02_diffuse.png'), 512, 82, true));
-const texEyes = await texture('eyes', await webp(path.join(P.mh, 'eyes/materials/brown_eye.png'), 256, 82, true));
+const lean = !!spec.lean;
+const texSkin = await texture('skin', await webp(path.join(texDir, `skins/textures/${spec.skin}.png`), 1024, 80));
+const texSuit = lean ? null : await texture('suit', await suitTexture(path.join(texDir, 'clothes/male_casualsuit06'), 1024));
+const texSuitN = lean ? null : await texture('suit_normal', await webp(path.join(texDir, 'clothes/male_casualsuit06/male_casualsuit06_normal.png'), 512, 85));
+const texShoes = lean ? null : await texture('shoes', await webp(path.join(texDir, 'clothes/shoes05/shoes05_diffuse.png'), 512, 80));
+const hairPng = spec.hair ? path.join(texDir, `hair/${spec.hair}/${spec.hair}_diffuse.png`) : null;
+const texHair = !hairPng ? null : await texture('hair', lean ? await greyHair(hairPng, 512) : await webp(hairPng, 512, 82, true));
+const texEyes = lean ? null : await texture('eyes', await webp(path.join(P.mh, 'eyes/materials/brown_eye.png'), 256, 82, true));
 
 const mat = (name, tex, o = {}) => {
   const m = doc
     .createMaterial(name)
-    .setBaseColorTexture(tex)
     .setRoughnessFactor(o.roughness ?? 0.8)
     .setMetallicFactor(0)
     .setDoubleSided(!!o.doubleSided);
+  if (tex) m.setBaseColorTexture(tex);
   if (o.normal) m.setNormalTexture(o.normal);
   if (o.alpha) m.setAlphaMode(o.alpha).setAlphaCutoff(0.35);
   return m;
 };
 const materials = {
   skin: mat('skin', texSkin, { roughness: 0.62 }),
-  tee: mat('tee', texSuit, { roughness: 0.88, normal: texSuitN, doubleSided: true }),
-  shorts: mat('shorts', texSuit, { roughness: 0.85, normal: texSuitN, doubleSided: true }),
+  tee: mat('tee', texSuit, { roughness: 0.88, normal: texSuitN ?? undefined, doubleSided: true }),
+  shorts: mat('shorts', texSuit, { roughness: 0.85, normal: texSuitN ?? undefined, doubleSided: true }),
   shoes: mat('shoes', texShoes, { roughness: 0.6 }),
-  hair: mat('hair', texHair, { roughness: 0.75, alpha: 'MASK', doubleSided: true }),
+  ...(texHair ? { hair: mat('hair', texHair, { roughness: 0.75, alpha: 'MASK', doubleSided: true }) } : {}),
   eyes: mat('eyes', texEyes, { roughness: 0.2, alpha: 'MASK' }),
 };
 
@@ -415,7 +426,7 @@ scene.addChild(meshNode);
 scene.addChild(rootBone);
 
 doc.createExtension(KHRDracoMeshCompression).setRequired(true);
-await doc.transform(dedup(), prune(), draco({ method: 'edgebreaker', quantizePosition: 14, quantizeNormal: 10, quantizeTexcoord: 12 }));
+await doc.transform(dedup(), prune({ keepAttributes: true }), draco({ method: 'edgebreaker', quantizePosition: 13, quantizeNormal: 8, quantizeTexcoord: 11 }));
 
 const io = new NodeIO().registerExtensions([KHRDracoMeshCompression, EXTTextureWebP]).registerDependencies({
   'draco3d.encoder': await draco3d.createEncoderModule(),
@@ -425,7 +436,75 @@ fs.mkdirSync(path.dirname(OUT), { recursive: true });
 await io.write(OUT, doc);
 console.log(`wrote ${OUT} (${(fs.statSync(OUT).size / 1024).toFixed(0)} KB)`);
 
-// Second skin tone, loaded on demand by the game.
-const extra = path.join(path.dirname(OUT), 'skin_dark.webp');
-fs.writeFileSync(extra, await webp(path.join(texDir, 'skins/textures/young_darkskinned_male_diffuse.png'), 1024, 80));
-console.log(`wrote ${extra} (${(fs.statSync(extra).size / 1024).toFixed(0)} KB)`);
+}
+
+/** Hair texture as a light neutral grey with its alpha kept, so the game can tint it any colour. */
+async function greyHair(file, size) {
+  const { data, info } = await sharp(file).resize(size, size, { fit: 'fill' }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 90) continue;
+    sum += data[i] * 0.3 + data[i + 1] * 0.59 + data[i + 2] * 0.11;
+    n++;
+  }
+  const mean = n ? sum / n : 128;
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = data[i] * 0.3 + data[i + 1] * 0.59 + data[i + 2] * 0.11;
+    // Keep the strand detail, centred on a light grey.
+    const v = Math.max(0, Math.min(255, 170 + (lum - mean) * 1.1));
+    data[i] = data[i + 1] = data[i + 2] = v;
+  }
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).webp({ quality: 82, alphaQuality: 90, effort: 6 }).toBuffer();
+}
+
+// ------------------------------------------------------------------------------------------------
+// The roster
+
+const M = 'macrodetails/';
+/** Body: ethnic face and frame, then muscle and weight (weights of each group add up to 1). */
+const body = (race, gender, age, muscle = 0, weight = 0) => {
+  const out = [];
+  const ages = Array.isArray(age) ? age : [[age, 1]];
+  for (const [a, w] of ages) {
+    out.push([`${M}${race}-${gender}-${a}.target`, w]);
+    const m = Math.abs(muscle);
+    const k = Math.abs(weight);
+    const mName = muscle >= 0 ? 'maxmuscle' : 'minmuscle';
+    const wName = weight >= 0 ? 'maxweight' : 'minweight';
+    const u = (mm, ww, x) => x > 0.001 && out.push([`${M}universal-${gender}-${a}-${mm}-${ww}.target`, w * x]);
+    u('averagemuscle', 'averageweight', (1 - m) * (1 - k));
+    u(mName, 'averageweight', m * (1 - k));
+    u('averagemuscle', wName, (1 - m) * k);
+    u(mName, wName, m * k);
+  }
+  return out;
+};
+
+/** Ten players, all invented: build, face, skin and hair differ; the outfit is tinted by the game. */
+export const ROSTER = [
+  { id: 'leo', targets: [...body('caucasian', 'male', 'young', 0.35)], scale: 1, hair: 'short02', skin: 'young_lightskinned_male_diffuse' },
+  { id: 'malik', targets: [...body('african', 'male', 'young', 0.7), ['head/head-square.target', 0.4]], scale: 1.05, hair: 'short04', skin: 'young_darkskinned_male_diffuse' },
+  { id: 'ines', targets: [...body('caucasian', 'female', 'young', 0.3, -0.2), ['head/head-oval.target', 0.4]], scale: 0.97, hair: 'ponytail01', skin: 'young_lightskinned_female_diffuse' },
+  { id: 'kenji', targets: [...body('asian', 'male', 'young', 0.2, -0.35)], scale: 0.96, hair: 'short03', skin: 'young_lightskinned_male_diffuse2' },
+  { id: 'aicha', targets: [...body('african', 'female', 'young', 0.6), ['head/head-diamond.target', 0.3]], scale: 1.0, hair: 'braid01', skin: 'young_darkskinned_female_diffuse' },
+  { id: 'hugo', targets: [...body('caucasian', 'male', [['old', 0.55], ['young', 0.45]], 0.1, 0.25), ['head/head-rectangular.target', 0.4]], scale: 0.99, hair: 'short01', skin: 'old_lightskinned_male_diffuse' },
+  { id: 'mei', targets: [...body('asian', 'female', 'young', 0.1, -0.3), ['head/head-round.target', 0.4]], scale: 0.93, hair: 'bob01', skin: 'young_lightskinned_female_diffuse2' },
+  { id: 'bruno', targets: [...body('caucasian', 'male', [['young', 0.7], ['old', 0.3]], 0.7, 0.55), ['head/head-round.target', 0.5]], scale: 0.98, hair: null, skin: 'middleage_lightskinned_male_diffuse' },
+  { id: 'sofia', targets: [...body('caucasian', 'female', 'young', 0.45, -0.1), ['head/head-invertedtriangular.target', 0.4]], scale: 1.03, hair: 'bob02', skin: 'young_lightskinned_female_diffuse3' },
+  { id: 'diego', targets: [...body('caucasian', 'male', 'young', 0.15, -0.3), ['head/head-triangular.target', 0.4]], scale: 1.01, hair: 'long01', skin: 'middleage_lightskinned_male_diffuse2' },
+];
+
+if (process.argv[3] === '--roster') {
+  // One lean file per character, next to the base model.
+  const dir = process.argv[4] ?? 'public/models/chars';
+  const only = process.argv[5];
+  for (const spec of ROSTER) if (!only || only === spec.id) await build({ ...spec, lean: true }, path.join(dir, `${spec.id}.glb`));
+} else {
+  const OUT = process.argv[3] ?? 'public/models/player.glb';
+  await build({ ...ROSTER[0], lean: false }, OUT);
+  // Second skin tone, loaded on demand by the game.
+  const extra = path.join(path.dirname(OUT), 'skin_dark.webp');
+  fs.writeFileSync(extra, await webp(path.join(P.tex, 'skins/textures/young_darkskinned_male_diffuse.png'), 1024, 80));
+  console.log(`wrote ${extra} (${(fs.statSync(extra).size / 1024).toFixed(0)} KB)`);
+}

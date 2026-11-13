@@ -182,16 +182,39 @@ function racketFace(accent: number): THREE.Texture {
   return tex;
 }
 
+export type RacketShape = 'round' | 'teardrop' | 'diamond';
+export type RacketFinish = 'matte' | 'gloss' | 'metal';
+
+/** Outline of the head, seen face on: round, wider towards the top (teardrop) or more so (diamond). */
+function headOutline(shape: RacketShape): THREE.Shape {
+  const rx = 0.122;
+  const ry = shape === 'diamond' ? 0.142 : 0.134;
+  const k = shape === 'round' ? 0 : shape === 'teardrop' ? 0.16 : 0.3;
+  const s = new THREE.Shape();
+  for (let i = 0; i <= 48; i++) {
+    const t = (i / 48) * Math.PI * 2;
+    const x = rx * Math.sin(t) * (1 + k * Math.cos(t));
+    const y = ry * Math.cos(t);
+    if (i === 0) s.moveTo(x, y);
+    else s.lineTo(x, y);
+  }
+  return s;
+}
+
 /** Padel racket: origin at the grip, +y along the handle, +z the face normal. */
-export function buildRacket(accent = 0xd8ef2f, frame = 0x14161a): THREE.Group {
+export function buildRacket(accent = 0xd8ef2f, frame = 0x14161a, shape: RacketShape = 'round', finish: RacketFinish = 'gloss'): THREE.Group {
   const g = new THREE.Group();
-  const frameMat = new THREE.MeshStandardMaterial({ color: frame, roughness: 0.35, metalness: 0.2 });
-  const faceMat = new THREE.MeshStandardMaterial({ map: racketFace(accent), roughness: 0.5, metalness: 0.1 });
+  const look = finish === 'matte' ? { roughness: 0.85, metalness: 0 } : finish === 'metal' ? { roughness: 0.22, metalness: 0.95 } : { roughness: 0.35, metalness: 0.2 };
+  const frameMat = new THREE.MeshStandardMaterial({ color: frame, ...look });
+  const faceMat = new THREE.MeshStandardMaterial({ map: racketFace(accent), roughness: finish === 'matte' ? 0.8 : 0.5, metalness: 0.1 });
   const gripMat = new THREE.MeshStandardMaterial({ color: 0xe9e9e4, roughness: 0.9 });
-  const headR = 0.122;
-  const head = new THREE.Mesh(new THREE.CylinderGeometry(headR, headR, 0.036, 28, 1), [frameMat, faceMat, faceMat]);
-  head.rotation.x = Math.PI / 2;
-  head.scale.set(1, 1, 1.1); // slightly taller than wide (z of the cylinder maps to the handle axis)
+  const depth = 0.036;
+  const geo = new THREE.ExtrudeGeometry(headOutline(shape), { depth, bevelEnabled: false, curveSegments: 12 });
+  // The face texture is square: map the outline's bounding square onto it.
+  const uv = geo.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 0.3 + 0.5, uv.getY(i) / 0.3 + 0.5);
+  geo.translate(0, 0, -depth / 2);
+  const head = new THREE.Mesh(geo, [faceMat, frameMat]);
   head.position.y = RACKET_REACH;
   head.castShadow = true;
   g.add(head);
@@ -264,9 +287,9 @@ export class CharacterView {
   }
 
   /** Changes the racket's colours (shop items). */
-  setRacket(accent: number, frame: number): void {
+  setRacket(accent: number, frame: number, shape: RacketShape = 'round', finish: RacketFinish = 'gloss'): void {
     this.group.remove(this.racket);
-    this.racket = buildRacket(accent, frame);
+    this.racket = buildRacket(accent, frame, shape, finish);
     this.group.add(this.racket);
   }
 

@@ -21,9 +21,10 @@ const { chromium } = require('playwright');
     ['modes-tournament', 'modes', ['[data-mode=tournament]']],
     ['modes-daily', 'modes', ['[data-mode=daily]']],
     ['online', 'online', []],
-    ['shop', 'shop', ['[data-item="racket.aurum"]']],
-    ['shop-outfit', 'shop', ['[data-kind=outfit]']],
-    ['locker', 'locker', ['[data-kind=racket]']],
+    ['shop', 'shop', ['[data-kind=character]', '[data-item="char.sofia"]']],
+    ['shop-racket', 'shop', ['[data-kind=racket]', '[data-item="racket.aurum"]']],
+    ['shop-court', 'shop', ['[data-kind=court]', '[data-item="court.miami"]']],
+    ['locker', 'locker', ['[data-kind=outfit]']],
     ['profile', 'profile', []],
     ['settings', 'settings', []],
   ];
@@ -57,7 +58,8 @@ const { chromium } = require('playwright');
         for (const el of press) {
           const r = rect(el);
           if (hit(r, badge)) out.push(`under the hosting badge: "${label(el)}"`);
-          if (r.left < sl - 1 || r.right > vw - sr + 1 || r.top < -1 || r.bottom > vh - Math.min(sb, 10) + 1) out.push(`outside the safe area: "${label(el)}" [${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.right)},${Math.round(r.bottom)}]`);
+          // Doors of the shelf slide sideways: those out of view are not a defect.
+          if (!el.closest('.portes') && (r.left < sl - 1 || r.right > vw - sr + 1 || r.top < -1 || r.bottom > vh - Math.min(sb, 10) + 1)) out.push(`outside the safe area: "${label(el)}" [${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.right)},${Math.round(r.bottom)}]`);
           if (el.matches('button, label.toggle') && (r.height < 40 || r.width < 40) && !el.closest('.portes')) out.push(`too small to press (${Math.round(r.width)}x${Math.round(r.height)}): "${label(el)}"`);
         }
         // Buttons must not cover one another (a card inside a wall is fine: compare siblings).
