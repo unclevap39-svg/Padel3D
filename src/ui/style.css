@@ -259,7 +259,7 @@ button {
 .prompt.show {
   opacity: 1;
 }
-.hint {
+.hud .hint {
   position: absolute;
   left: 50%;
   top: 40%;
@@ -273,7 +273,7 @@ button {
   transition: opacity 0.15s ease;
   white-space: nowrap;
 }
-.hint.show {
+.hud .hint.show {
   opacity: 1;
 }
 /* Power gauge above the player. */

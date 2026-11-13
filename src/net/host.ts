@@ -33,6 +33,8 @@ export class HostSession {
       this.sim.press(this.guest, shotType(msg.t));
     } else if (msg.k === 'r') {
       this.sim.release(this.guest);
+    } else if (msg.k === 'c') {
+      this.sim.cancel(this.guest);
     } else if (msg.k === 'shot' && msg.i && typeof msg.i === 'object') {
       const i = msg.i as { type?: unknown; power?: unknown; aim?: unknown; angle?: unknown };
       const power = Math.max(0, Math.min(1, Number(i.power) || 0));

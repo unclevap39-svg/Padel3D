@@ -225,6 +225,97 @@ describe('timing', () => {
   });
 });
 
+describe('pressed button', () => {
+  it('keeps running to a ball at the edge of reach instead of stopping halfway', () => {
+    let pressed = 0;
+    let struck = 0;
+    for (const seed of [41, 53]) {
+      const sim = new Simulation({ difficulty: 'hard', assist: 1, humanControlled: true, seed, singles: true, match: { setsToWin: 40 } });
+      sim.startMatch(0);
+      let waiting = false;
+      for (let i = 0; i < TICKS(500); i++) {
+        if (sim.phase === 'serve_ready' && sim.server.id === 0 && !sim.chargeOf(0)) sim.shot(0, { type: 'drive', power: 0.5, aim: 0 });
+        const mine = sim.phase === 'rally' && sim.match.referee.lastHitTeam === 1;
+        if (mine && sim.plans[0] && !sim.chargeOf(0) && !sim.players[0].swing && !waiting) {
+          sim.press(0, 'drive');
+          pressed++;
+          waiting = true;
+        }
+        sim.setMove(0, 0, 0);
+        sim.tick();
+        for (const e of sim.drainEvents()) {
+          if (e.kind === 'hit' && e.player === 0 && e.stroke !== 'serve') struck++;
+          if (e.kind === 'hit' || e.kind === 'point') waiting = false;
+        }
+      }
+    }
+    log('pressed', pressed, 'struck', struck);
+    expect(pressed).toBeGreaterThan(80);
+    // Every ball that had a plan when the button went down is played, bar the odd one.
+    expect(struck / pressed).toBeGreaterThan(0.88); // 0.83 before the run was kept up; the rest are balls that went out
+  }, 120000);
+
+  it('plays nothing when the press is called off (pause, page hidden)', () => {
+    const sim = new Simulation({ difficulty: 'medium', assist: 0.5, humanControlled: true, seed: 3 });
+    sim.startMatch(0);
+    for (let i = 0; i < TICKS(6) && sim.phase !== 'serve_ready'; i++) sim.tick();
+    sim.humanPress('drive');
+    for (let i = 0; i < 20; i++) sim.tick();
+    sim.humanCancel();
+    for (let i = 0; i < TICKS(1); i++) sim.tick();
+    expect(sim.phase).toBe('serve_ready');
+    expect(sim.chargeOf(0)).toBeNull();
+  });
+
+  it('still works when the thumb stayed on the button through a fault', () => {
+    const sim = new Simulation({ difficulty: 'medium', assist: 0.5, humanControlled: true, seed: 8 });
+    sim.startMatch(0);
+    let serves = 0;
+    let fault = false;
+    let releaseAt = Infinity;
+    for (let i = 0; i < TICKS(14); i++) {
+      if (sim.phase === 'serve_ready' && serves === 0 && !sim.chargeOf(0)) sim.shot(0, { type: 'drive', power: 0.5, aim: 0 });
+      sim.tick();
+      for (const e of sim.drainEvents()) {
+        if (e.kind === 'hit' && e.stroke === 'serve') {
+          serves++;
+          if (serves === 1) {
+            // Into the net, and the thumb goes straight back on the button and stays there.
+            const b = sim.world.ball;
+            sim.world.setBall({ ...b, vx: 0, vy: -2, vz: -Math.sign(b.pz) * 6 });
+            sim.press(0, 'drive');
+          }
+        }
+        if (e.kind === 'fault') fault = true;
+        if (e.kind === 'serve_ready' && fault) releaseAt = sim.now + 0.5;
+      }
+      if (sim.now >= releaseAt) {
+        expect(sim.chargeOf(0)?.gauge).toBeCloseTo(0.5, 1);
+        sim.release(0);
+        releaseAt = Infinity;
+      }
+    }
+    expect(fault).toBe(true);
+    expect(serves).toBe(2);
+  });
+
+  it('does not serve by itself with a press released while walking back', () => {
+    const sim = new Simulation({ difficulty: 'medium', assist: 0.5, humanControlled: true, seed: 8 });
+    sim.startMatch(0);
+    // Press and release during the walk to the serve position.
+    sim.press(0, 'drive');
+    for (let i = 0; i < 30; i++) sim.tick();
+    sim.release(0);
+    let swings = 0;
+    for (let i = 0; i < TICKS(5); i++) {
+      sim.tick();
+      for (const e of sim.drainEvents()) if (e.kind === 'swing') swings++;
+    }
+    expect(sim.phase).toBe('serve_ready');
+    expect(swings).toBe(0);
+  });
+});
+
 describe('serve', () => {
   /** How far the server is from the serve position, and whether a receiver is out of place. */
   function offSpot(sim: Simulation): number {

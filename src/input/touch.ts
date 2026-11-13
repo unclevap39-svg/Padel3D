@@ -24,6 +24,8 @@ export class TouchControls {
   onPress: (type: ShotType) => void = () => {};
   /** The shot button in use was released. */
   onRelease: () => void = () => {};
+  /** The press was interrupted (menu, page hidden): it must not play a shot. */
+  onCancel: () => void = () => {};
   /** DOM root (exposed for tests and tooling). */
   readonly root: HTMLElement;
   private base: HTMLElement;
@@ -80,7 +82,7 @@ export class TouchControls {
     this.base.classList.remove('active');
     if (this.active) {
       this.active = null;
-      this.onRelease();
+      this.onCancel();
     }
     for (const b of Object.values(this.buttons)) b.classList.remove('pressed');
     this.setGauge(null, 0);

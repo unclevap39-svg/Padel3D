@@ -279,6 +279,11 @@ export class Simulation {
     c.releasedT = this.now;
   }
 
+  /** The press is called off (menu opened, page hidden): nothing is played, unless the swing has started. */
+  cancel(id: PlayerId): void {
+    if (this.charges[id] && !this.charges[id]!.swinging) this.charges[id] = null;
+  }
+
   /** Where a human player's stick points, -1..1 towards their right: read when the ball is struck. */
   setAim(id: PlayerId, aim: number): void {
     this.aimInput[id] = clamp(aim, -1, 1);
@@ -312,6 +317,10 @@ export class Simulation {
     this.release(0);
   }
 
+  humanCancel(): void {
+    this.cancel(0);
+  }
+
   humanShot(intent: ShotIntent): void {
     this.shot(0, intent);
   }
@@ -328,8 +337,8 @@ export class Simulation {
   }
 
   /** Ball state to predict from, and the time it was taken at (same shape as the online guest's). */
-  viewBall(): { ball: BallState; t: number } {
-    return { ball: this.world.ball, t: this.now };
+  viewBall(): { ball: BallState; t: number; stale: boolean } {
+    return { ball: this.world.ball, t: this.now, stale: false };
   }
 
   /** Aim and placement help for a human player. */
@@ -455,9 +464,14 @@ export class Simulation {
       }
     }
     this.ballHeld = true;
-    // A button already held by the server starts charging now, not while walking to the spot.
-    const held = this.charges[server.id];
-    if (held && held.power === null) held.t0 = this.now;
+    // A button already held by the server starts charging now, not while walking to the spot;
+    // a press already released while walking is forgotten: the serve is never dosed blind.
+    for (const p of this.active) {
+      const c = this.charges[p.id];
+      if (!c) continue;
+      if (c.power !== null) this.charges[p.id] = null;
+      else if (p === server) c.t0 = this.now;
+    }
     this.aiServeAt = this.now + 0.9 + this.random() * 0.5;
     this.setPhase('serve_ready');
     this.events.push({ kind: 'serve_ready', server: server.id, serveNumber: this.match.referee.serveNumber });
@@ -609,7 +623,8 @@ export class Simulation {
   private endRally(): void {
     this.hitterId = null;
     this.plans = [null, null, null, null];
-    this.charges = [null, null, null, null];
+    // A thumb still on a button keeps it: the gauge simply starts again for the next ball.
+    this.charges = this.charges.map((c) => (c && c.power === null && !c.swinging ? { ...c, t0: this.now, stance: null } : null));
     this.ballGoingOut = false;
     for (const p of this.active) {
       p.moveTo = null;
@@ -715,6 +730,9 @@ export class Simulation {
       if (!c || c.swinging) continue;
       if (p.swing && p.swing.willHit && this.now < p.swing.endT - 0.12) continue; // finishing the last stroke
       const incoming = live && ref.lastHitTeam !== p.team;
+      if (!incoming) c.stance = null;
+      // A ball that is going out is left alone, unless the button was pressed after it was struck.
+      if (incoming && this.ballGoingOut && c.t0 < this.lastHitT) continue;
       let ic: Intercept | null = null;
       if (incoming) {
         ic = this.autoMoves(p)
@@ -729,6 +747,7 @@ export class Simulation {
             });
       }
       if (ic) {
+        c.stance = ic.stance;
         if (ic.t - this.now <= SWING_LEAD + TICK_DT * 0.5) {
           if (this.requestSwing(p, { type: c.type, power: c.power ?? 0, aim: c.aim }, ic)) {
             c.swinging = true;
@@ -737,8 +756,10 @@ export class Simulation {
         }
         continue;
       }
-      // Nothing to strike. A held button keeps waiting; a released one is dropped after a moment.
+      // Nothing to strike. A held button keeps waiting; a released one is dropped after a moment,
+      // but not while the player is still running after a ball at the edge of reach.
       if (c.power === null || this.now - c.releasedT < PRESS_BUFFER) continue;
+      if (incoming && c.stance && this.autoMoves(p) && p.distanceTo(c.stance.x, c.stance.z) > 0.3) continue;
       this.charges[p.id] = null;
       const b = this.world.ball;
       const near = Math.hypot(b.px - p.x, b.pz - p.z) < 4 && b.pz * p.sideSign > 0;
@@ -955,9 +976,13 @@ export class Simulation {
       const a = this.assistOf(p);
       const c = this.charges[p.id];
       const plan = this.plans[p.id];
-      if (c && (c.swinging ? c.stance : plan)) {
+      const leave = this.ballGoingOut && !!c && c.t0 < this.lastHitT;
+      // The last planned stance is kept while the plan flickers: a ball at the very edge of
+      // reach must not stop the run halfway.
+      const goal = c && !leave ? (c.swinging ? c.stance : (plan?.stance ?? c.stance)) : null;
+      if (c && goal) {
         // Committed to a shot: go to the ball flat out; the stick is the aim, not the legs.
-        p.moveTo = c.swinging ? c.stance : plan!.stance;
+        p.moveTo = goal;
         p.runSpeed = HUMAN_SPEED;
         p.wishX = 0;
         p.wishZ = 0;

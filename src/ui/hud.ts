@@ -45,7 +45,15 @@ export class Hud {
     this.root.appendChild(this.speed);
     const pause = el('button', 'pause-btn', '<span></span><span></span>');
     pause.setAttribute('aria-label', 'Pause');
-    pause.addEventListener('click', () => this.onPause());
+    // On the pointer, not on click: a click is not sent while another finger is on the screen
+    // (the thumb on the joystick), which is exactly when the player wants to pause.
+    pause.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.onPause();
+    });
+    pause.addEventListener('click', (e) => {
+      if (e.detail === 0) this.onPause(); // keyboard activation
+    });
     this.root.appendChild(pause);
     const bannerWrap = el('div', 'banner');
     this.banner = el('div', 'banner-main');

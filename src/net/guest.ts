@@ -39,7 +39,11 @@ export class GuestSim {
   /** Local clock, for the gauge of the shot being prepared. */
   private clock = 0;
   /** Shot button held or just released on this side; the host keeps the real one. */
-  private charge: { type: ShotType; t0: number; power: number | null; releasedT: number } | null = null;
+  private charge: { type: ShotType; t0: number; power: number | null; releasedT: number; hostT: number } | null = null;
+  /** Side that struck the ball last, as far as the replay has got: 1 = the opponents. */
+  private lastHitTeam = -1;
+  /** Controls protocol of the host; an older build only understands complete shots. */
+  hostVersion = 2;
 
   constructor(link: Link) {
     this.link = link;
@@ -96,16 +100,29 @@ export class GuestSim {
   }
 
   humanPress(type: ShotType): void {
-    this.link.send({ k: 'p', t: type });
-    this.charge = { type, t0: this.clock, power: null, releasedT: 0 };
+    if (this.hostVersion >= 2) this.link.send({ k: 'p', t: type });
+    const newest = this.snaps[this.snaps.length - 1];
+    this.charge = { type, t0: this.clock, power: null, releasedT: 0, hostT: newest ? newest.t : 0 };
   }
 
   humanRelease(): void {
     const c = this.charge;
+    // Always tell the host: its copy of the press may still be held when ours is already gone.
+    if (this.hostVersion >= 2) this.link.send({ k: 'r' });
     if (!c || c.power !== null) return;
-    this.link.send({ k: 'r' });
     c.power = gaugeAt(this.clock - c.t0);
     c.releasedT = this.clock;
+    if (this.hostVersion < 2) {
+      // Older host: it plays complete shots, with the aim as an angle.
+      const i = { type: c.type, power: c.power, aim: this.move.x, angle: this.move.x * 0.62 };
+      this.link.send({ k: 'shot', i });
+    }
+  }
+
+  /** The press is called off (menu opened, page hidden). */
+  humanCancel(): void {
+    if (this.hostVersion >= 2) this.link.send({ k: 'c' });
+    this.charge = null;
   }
 
   /** The shot being prepared, as shown on the gauge. The host applies the same rule to the real one. */
@@ -116,8 +133,12 @@ export class GuestSim {
   }
 
   /** Ball state to predict from: position and velocity of the same instant, and that instant. */
-  viewBall(): { ball: BallState; t: number } {
-    return this.latest;
+  viewBall(): { ball: BallState; t: number; stale: boolean } {
+    // The newest state may already contain a strike or a bounce that the replay has not
+    // announced yet: a prediction made from it would not match what the view knows.
+    const next = this.pending[0];
+    const ahead = !!next && next.t <= this.latest.t + 0.001 && (next.ev.kind === 'hit' || next.ev.kind === 'bounce');
+    return { ball: this.latest.ball, t: this.latest.t, stale: ahead };
   }
 
   /** The game loop ticks the simulation; here time is driven by `sync` instead. */
@@ -132,9 +153,11 @@ export class GuestSim {
         c.power = 1;
         c.releasedT = this.clock;
       }
-      // A released press that led to nothing is forgotten, as on the host.
+      // A released press that led to nothing is forgotten, as on the host — but not while the
+      // ball is on its way: the host keeps the shot armed until it is played.
       const swinging = this.players[0].swing !== null;
-      if (c.power !== null && !swinging && this.clock - c.releasedT > 1.4) this.charge = null;
+      const incoming = this.phase === 'rally' && this.lastHitTeam === 1;
+      if (c.power !== null && !swinging && !incoming && this.clock - c.releasedT > 1.4) this.charge = null;
     }
     this.sinceMove += dt;
     if (this.sinceMove >= 1 / SNAPSHOT_RATE) {
@@ -201,14 +224,30 @@ export class GuestSim {
 
     // Events are released when the replay reaches the moment they happened.
     while (this.pending.length && this.pending[0].t <= this.now) {
-      const { ev, sc } = this.pending.shift()!;
+      const { ev, sc, t } = this.pending.shift()!;
       if (sc) this.applyScore(sc);
       if (ev.kind === 'swing') this.players[ev.player].swing = ev.swing;
       if (ev.kind === 'hit') for (const p of this.players) if (p.team !== this.players[ev.player].team) p.splitT = this.now;
-      // My press is used up once my shot has left, or when the point stops.
-      const mine = (ev.kind === 'hit' && ev.player === 0) || (ev.kind === 'swing' && ev.player === 0 && !ev.swing.willHit);
-      if (mine || ev.kind === 'point' || ev.kind === 'fault' || ev.kind === 'let') this.charge = null;
-      if (ev.kind === 'phase' && ev.phase === 'serve_motion' && this.match.referee.server === 0) this.charge = null;
+      if (ev.kind === 'hit') this.lastHitTeam = this.players[ev.player].team;
+      const stopped = ev.kind === 'point' || ev.kind === 'fault' || ev.kind === 'let';
+      if (stopped || ev.kind === 'serve_ready') this.lastHitTeam = -1;
+      const ch = this.charge;
+      if (ch) {
+        // An event older than the press belongs to the previous shot: it must not erase this one.
+        const fresh = t >= ch.hostT;
+        // My press is used up once my shot has left; a serve uses it as its motion starts.
+        const mine = (ev.kind === 'hit' && ev.player === 0) || (ev.kind === 'swing' && ev.player === 0 && !ev.swing.willHit);
+        const served = ev.kind === 'phase' && ev.phase === 'serve_motion' && this.match.referee.server === 0;
+        if (fresh && (mine || served)) this.charge = null;
+        else if (stopped) {
+          // As on the host: a thumb still down keeps the button, the gauge starts again.
+          if (ch.power === null) ch.t0 = this.clock;
+          else this.charge = null;
+        } else if (ev.kind === 'serve_ready') {
+          if (ch.power !== null) this.charge = null;
+          else if (ev.server === 0) ch.t0 = this.clock;
+        }
+      }
       this.released.push(ev);
     }
   }

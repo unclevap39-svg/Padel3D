@@ -124,6 +124,57 @@ describe('guest controls', () => {
   });
 });
 
+describe('guest button state', () => {
+  it('always tells the host when the button goes up, even after its own copy was cleared', () => {
+    const [hostLink, guestLink] = createLoopback({ dropFast: 0, random: () => 0.5 }) as ReturnType<typeof createLoopback> & Array<{ pump(): void }>;
+    const sim = new Simulation({ difficulty: 'medium', assist: 0.5, humanControlled: false, humans: [0, 2], singles: true, seed: 5 });
+    const host = new HostSession(sim, hostLink);
+    const guest = new GuestSim(guestLink);
+    hostLink.onMessage = (m) => host.receive(m as GuestMsg);
+    guestLink.onMessage = (m) => guest.receive(m as HostMsg);
+    sim.startMatch(2);
+    host.sendStart();
+    const dt = TICK_DT * 2;
+    // Script on the guest: serve with a short press, then press again 50 ms later and release.
+    const plan: Array<[number, () => void]> = [];
+    let t0 = -1;
+    let heldOnHostAtEnd: boolean | undefined;
+    for (let frame = 0; frame < 900; frame++) {
+      sim.tick();
+      sim.tick();
+      host.afterFrame(sim.drainEvents(), dt);
+      (guestLink as unknown as { pump(): void }).pump();
+      guest.sync(dt);
+      guest.drainEvents();
+      if (t0 < 0 && guest.phase === 'serve_ready' && guest.match.referee.server === 0) {
+        t0 = frame;
+        plan.push([0, () => guest.humanPress('drive')], [12, () => guest.humanRelease()], [15, () => guest.humanPress('drive')], [27, () => guest.humanRelease()]);
+      }
+      while (plan.length && frame - t0 >= plan[0][0]) plan.shift()![1]();
+      (hostLink as unknown as { pump(): void }).pump();
+      if (t0 >= 0 && frame - t0 === 60) heldOnHostAtEnd = sim.chargeOf(2)?.held ?? false;
+    }
+    expect(t0).toBeGreaterThanOrEqual(0);
+    // The second press was released: the host must not be left with a held button.
+    expect(heldOnHostAtEnd).toBe(false);
+  });
+
+  it('falls back to complete shots against a host on the previous build', () => {
+    const sent: GuestMsg[] = [];
+    const link = { send: (m: unknown) => sent.push(m as GuestMsg), onMessage: () => {}, onClose: () => {}, close() {}, open: true };
+    const guest = new GuestSim(link);
+    guest.hostVersion = 1;
+    guest.setHumanMove(0.5, 0);
+    guest.humanPress('lob');
+    guest.sync(0.4);
+    guest.humanRelease();
+    const shots = sent.filter((m) => m.k === 'shot');
+    expect(sent.some((m) => m.k === 'p' || m.k === 'r')).toBe(false);
+    expect(shots.length).toBe(1);
+    expect((shots[0] as Extract<GuestMsg, { k: 'shot' }>).i).toMatchObject({ type: 'lob', aim: 0.5 });
+  });
+});
+
 describe('online match over a loopback link', () => {
   it('mirrors events and scores for the guest', () => {
     const e = mirrorEvent({ kind: 'hit', player: 2, stroke: 'forehand', speedKmh: 60, x: 1, y: 1, z: -8 });

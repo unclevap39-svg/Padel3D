@@ -36,17 +36,24 @@ export interface HelloMsg {
   /** Shirt, shorts and racket colours, so each side sees the other's look. */
   look: { shirt: number; shorts: number; racket: number; frame: number };
   assist?: number;
+  /** Version of the controls protocol: 2 = held button (p / r / c messages). Absent on older builds. */
+  v?: number;
 }
+
+/** Controls protocol spoken by this build. */
+export const PROTOCOL = 2;
 
 export type HostMsg = Snapshot | EventMsg | HelloMsg | { k: 'start'; singles: boolean; sc: ScoreSnapshot & { serveNumber: 1 | 2 } } | { k: 'bye' };
 /**
  * From the guest: `m` is the stick (it moves the player and aims the shot), `p` a shot button
- * going down, `r` its release, `shot` a complete press with a set power (scripts).
+ * going down, `r` its release, `c` a press called off, `shot` a complete press with a set power
+ * (scripts, and hosts still running an older build).
  */
 export type GuestMsg =
   | { k: 'm'; x: number; z: number }
   | { k: 'p'; t: ShotType }
   | { k: 'r' }
+  | { k: 'c' }
   | { k: 'shot'; i: ShotIntent }
   | HelloMsg
   | { k: 'bye' };

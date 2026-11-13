@@ -8,7 +8,7 @@ import { TouchControls, vibrate } from '../input/touch';
 import { GuestSim } from '../net/guest';
 import { HostSession } from '../net/host';
 import { Lobby, type MatchInfo } from '../net/lobby';
-import type { GuestMsg, HelloMsg, HostMsg, Link, NetMsg } from '../net/protocol';
+import { type GuestMsg, type HelloMsg, type HostMsg, type Link, type NetMsg, PROTOCOL } from '../net/protocol';
 import { type Prediction, predict } from '../physics/ballistics';
 import { TICK_DT } from '../physics/world';
 import { inServiceBox, serviceBoxXSign, teamOf } from '../rules/court';
@@ -214,6 +214,7 @@ export class Game {
       this.sim.humanPress(type);
     };
     this.controls.onRelease = () => this.sim.humanRelease();
+    this.controls.onCancel = () => this.sim.humanCancel();
     window.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape' || e.repeat || !this.playing) return;
       if (this.menu.current === 'pause') this.resume();
@@ -327,6 +328,7 @@ export class Game {
       name: this.profile.name,
       look: { shirt: outfit.color, shorts: outfit.color2 ?? 0x15171c, racket: racket.color, frame: racket.color2 ?? 0x14161a },
       assist: this.settings.assist,
+      v: PROTOCOL,
     };
   }
 
@@ -389,6 +391,7 @@ export class Game {
 
   /** The other player's name, colours and assist setting. */
   private opponentHello(msg: HelloMsg): void {
+    if (this.sim instanceof GuestSim) this.sim.hostVersion = typeof msg.v === 'number' ? msg.v : 1;
     const look = msg.look ?? { shirt: 0xd8362f, shorts: 0x15171c, racket: 0xd8ef2f, frame: 0x14161a };
     const num = (v: unknown, fallback: number) => (typeof v === 'number' && v >= 0 && v <= 0xffffff ? Math.floor(v) : fallback);
     // Two pairs in the same shirt would be impossible to tell apart: the opponents then keep the default red.
@@ -674,9 +677,11 @@ export class Game {
       v.goingOut = false;
       v.landing = null;
     } else if (this.clock >= v.recalcAt) {
-      v.recalcAt = this.clock + 0.1;
-      const { ball, t } = sim.viewBall();
-      const pred = predict(ball, 3, v.bounces);
+      const { ball, t, stale } = sim.viewBall();
+      // Online, the newest state can be ahead of the events already shown (a bounce not yet
+      // announced): predicting from it would call a good ball out. Try again next frame.
+      if (!stale) v.recalcAt = this.clock + 0.1;
+      const pred = stale && v.pred ? v.pred : predict(ball, 3, v.bounces);
       v.pred = pred;
       const o = { now: sim.now, predT0: t, mustBounce: v.serveFlight, reaction: 0, minLead: 0.04 };
       v.ic = bestIntercept(p0, pred, { ...o, wantOverhead: charge?.type === 'smash' });
@@ -685,7 +690,7 @@ export class Game {
       const fb = pred.firstBounce;
       let out = false;
       if (v.bounces === 0) {
-        out = pred.net || pred.wallBeforeBounce || (pred.out && !fb);
+        out = (pred.net && !fb) || pred.wallBeforeBounce || (pred.out && !fb);
         if (fb && fb.z < 0) out = true;
         if (fb && v.serveFlight && !inServiceBox(fb.x, fb.z, 0, serviceBoxXSign(1, ref.serveSide))) out = true;
       }

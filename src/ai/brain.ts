@@ -35,7 +35,9 @@ export class Ai {
     sim.ballGoingOut = false;
     if (!pred || ref.floorBounces !== 0) return;
     const receiving = otherTeam(hitTeam);
-    let goingOut = pred.net || pred.wallBeforeBounce || (pred.out && !pred.firstBounce);
+    // What happens after the first bounce (a smash coming back off the glass into the net) does
+    // not make the ball a bad one.
+    let goingOut = (pred.net && !pred.firstBounce) || pred.wallBeforeBounce || (pred.out && !pred.firstBounce);
     const fb = pred.firstBounce;
     if (fb) {
       const onReceiverSide = (fb.z > 0 ? 0 : 1) === receiving;
